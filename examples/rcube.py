@@ -10,11 +10,14 @@ from drender.render import inside_outside
 # -----------------------------------------------------------------------------
 
 if __name__ == "__main__":
+    # set defaults
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     size = 256
     rcube = Rcube(size)
     tris, uvs = rcube.tris()
     xx, yy = torch.meshgrid([torch.arange(0, size), torch.arange(0, size)])
     pixels = torch.stack([xx, yy], dim=-1).reshape(-1, 2)
+    pixels.to(device)
 
     t0 = time.time()
     barycentrics, mask = inside_outside(pixels, tris[:, :, :2])
