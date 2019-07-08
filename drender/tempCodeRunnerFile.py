@@ -1,0 +1,2 @@
+
+        if "vt" in line:
