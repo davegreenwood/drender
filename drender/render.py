@@ -1,6 +1,5 @@
 """Render an object"""
 import torch
-import numpy as np
 
 DTYPE = torch.float
 DEVICE = "cpu"
@@ -39,7 +38,7 @@ def box2pts(bb, size):
     x1, y1, x2, y2 = bb.long()
     xx, yy = torch.meshgrid(
         [torch.arange(x1, x2), torch.arange(y1, y2)])
-    return torch.stack([xx, yy], dim=-1).reshape(2, -1)
+    return xx.reshape(-1), yy.reshape(-1)
 
 
 def area2d(a, b, c):
@@ -121,13 +120,11 @@ class Render(torch.nn.Module):
             self.size, dtype=self.dtype, device=self.device)
         for t in tris:
             self.raster(t)
-        self.zbuffer -= zmin
-        self.zbuffer /= self.zbuffer.view(-1).max(0)[0]
 
     def aabb_idx(self, tri):
         """
         Return the (x, y) indices of points within the triangle AABB.
-        If, the box is empty the coords will be None, None
+        If the box is empty the coords will be None, None
         """
         bb = aabb(tri)
         x, y = box2pts(bb, self.size)
@@ -142,12 +139,12 @@ class Render(torch.nn.Module):
         # mostly 2d - assuming the triangle is in view space
         tri2d = tri[:, :2]
 
-        # index to everything
+        # index to everything - flip x, y to rotate image
         x, y = self.aabb_idx(tri2d)
         if x.shape[0] == 0:
             return None
 
-        # area of tri
+        # signed area of tri - could do back face cull here
         w = area2d(tri2d[None, 0], tri2d[1], tri2d[2])
         if torch.isclose(w, torch.zeros_like(w)):
             return None
