@@ -167,15 +167,18 @@ class Render(torch.nn.Module):
         pts3d = barys(pAB[pts_msk], pBC[pts_msk], w, tri)
 
         # keep points that are nearer than existing zbuffer
-        zbuffer = self.zbuffer[x, y, :].view(-1)
-        zbf_msk = pts3d[:, 2].view(-1) >= zbuffer
+        zbuffer = self.zbuffer[x[pts_msk], y[pts_msk], :].view(-1)
+        zpoints = pts3d[:, 2].view(-1)
+        zbf_msk = torch.zeros_like(pts_msk)
+        zbf_msk[pts_msk] = zpoints >= zbuffer
+
         if torch.allclose(zbf_msk, torch.zeros_like(zbf_msk)):
             return None
 
-        # render points nearer and in triangle
+        # render points that are nearer and in triangle
         rnd_msk = pts_msk * zbf_msk
 
-        self.zbuffer[x[rnd_msk], y[rnd_msk], :] = pts3d[rnd_msk, 2, None]
-        self.result[x[rnd_msk], y[rnd_msk], :3] = pts3d[rnd_msk, :3]
+        # fill buffers
+        self.zbuffer[x[rnd_msk], y[rnd_msk], 0] = pts3d[:, 2]
+        self.result[x[rnd_msk], y[rnd_msk], :3] = pts3d[:, :3]
         self.result[x[rnd_msk], y[rnd_msk], 3] = 1.0
-        return None
