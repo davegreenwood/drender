@@ -52,21 +52,23 @@ def area2d(a, b, c):
         (b[1] - a[:, 1]) * (c[0] - a[:, 0])
 
 
-def barys(pAB, pBC, pCA):
-    """sub triangle areas to barycentric
-    TODO: potential division by zero here.
+def barys(pAB, pBC, w, tri):
     """
-    bx = pBC / pAB
-    by = pCA / pAB
-    bz = 1.0 - bx - by
-    return torch.cat([bx[..., None], by[..., None], bz[..., None]], dim=-1)
+    Sub triangle areas to barycentric, mult by tri vertices.
+    """
+    assert w > 0
+    w1 = pAB / w
+    w2 = pBC / w
+    w3 = 1.0 - w1 - w2
+    v1, v2, v3, = tri
+    return w1[..., None] * v1 + w2[..., None] * v2 + w3[..., None] * v3
 
 
 def inside_mask(w1, w2, w3):
     """
-    From weighted triangles, decide if all are greater than zero.
+    From triangle areas, decide if all are greater than zero.
     returns a mask: [1, 1, 0, ... 1, 0]
-    NOTE: is this operation out of graph as non - differentiable?
+    NOTE: is this operation out of graph as it is non - differentiable?
     """
     stacked = torch.stack([w1, w2, w3])
     clamped = torch.clamp(stacked, min=0)
@@ -150,19 +152,19 @@ class Render(torch.nn.Module):
         if torch.isclose(w, torch.zeros_like(w)):
             return None
 
-        # signed weighted area of subtriangles, NB: any could be zero
+        # signed area of subtriangles, NB: any could be zero
         pts = self.pts[x, y, :]
-        pAB = area2d(pts, tri2d[0], tri2d[1]) * w
-        pBC = area2d(pts, tri2d[1], tri2d[2]) * w
-        pCA = area2d(pts, tri2d[2], tri2d[0]) * w
+        pAB = area2d(pts, tri2d[0], tri2d[1])
+        pBC = area2d(pts, tri2d[1], tri2d[2])
+        pCA = area2d(pts, tri2d[2], tri2d[0])
 
         # mask for pts that are in the triangle,
         pts_msk = inside_mask(pAB, pBC, pCA)
         if torch.allclose(pts_msk, torch.zeros_like(pts_msk)):
             return None
 
-        # interpolated 3d points to consider for render
-        pts3d = barys(pAB, pBC, pCA) @ tri
+        # interpolated 3d pixels to consider for render
+        pts3d = barys(pAB[pts_msk], pBC[pts_msk], w, tri)
 
         # keep points that are nearer than existing zbuffer
         zbuffer = self.zbuffer[x, y, :].view(-1)
