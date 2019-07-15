@@ -5,40 +5,43 @@ DTYPE = torch.float
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
-def backface_cull(tris):
+class AABB(torch.autograd.Function):
     """
-    Return only the triangles that face forward. Tris are assumed to be
-    in view space."""
-    normals = torch.cross(tris[:, 1] - tris[:, 0], tris[:, 2] - tris[:, 0])
-    m = torch.tensor([0, 0, 1.0], dtype=DTYPE, device=DEVICE) @ normals
-    return tris[m > 0]
+    Return indexing values for a bounding box to be used:
+    xmin, ymin, xmax, ymax = aabb
+    slice = array2d[xmin:xmax, ymin:ymax]
+    """
 
+    @staticmethod
+    def forward(ctx, aabb, size):
+        """
+        aabb is a tensor we want to clamp to -1, 1 then scale to screen space.
+        """
+        aabb = torch.clamp(aabb.detach(), min=-1, max=1)
+        aabb += 1.0
+        aabb /= 2
+        aabb *= size
 
-def aabb(tri):
-    """
-    Tri is tensor in screen space - screen space is 2d in -1, 1.
-    returns axis aligned box clamped to screen space.
-    tri : tensor 3 x 2 (3 points by (x, y))
-    TODO: What if min and max are equal ie. the tri is off screen...
-    """
-    _min, _max = tri.min(dim=0)[0], tri.max(dim=0)[0]
-    return torch.cat(
-        [torch.clamp(_min, min=-1, max=1),
-         torch.clamp(_max, min=-1, max=1)])
+        ctx.save_for_backward(aabb)
+        ctx.save_for_backward(size)
+        aabb = aabb.long()
+        aabb.to(DEVICE)
+        return aabb
 
+    @staticmethod
+    def backward(ctx, grad_output):
+        """
+        backward pass.
+        """
+        aabb, size = ctx.saved_tensors
+        grad_input = grad_output.clone()
 
-def box2pts(bb, size):
-    """
-    return (x, y) coordinates within a bounding box.
-    NOTE: This is non differentiable - does it matter?
-    """
-    bb += 1.0
-    bb /= 2
-    bb *= size
-    x1, y1, x2, y2 = bb.long()
-    xx, yy = torch.meshgrid(
-        [torch.arange(x1, x2), torch.arange(y1, y2)])
-    return xx.reshape(-1), yy.reshape(-1)
+        grad_input[aabb < 0] = 0
+        grad_input[aabb > size] = size
+        grad_input /= size
+        grad_input *= 2
+
+        return grad_input, None
 
 
 def area2d(a, b, c):
