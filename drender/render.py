@@ -66,26 +66,6 @@ def barys(pAB, pBC, w, tri):
     return w1[..., None] * v1 + w2[..., None] * v2 + w3[..., None] * v3
 
 
-def inside_mask(w1, w2, w3):
-    """
-    From triangle areas, decide if all are greater than zero.
-    returns a mask: [1, 1, 0, ... 1, 0]
-    NOTE: is this operation out of graph as it is non - differentiable?
-    """
-    stacked = torch.stack([w1, w2, w3])
-    clamped = torch.clamp(stacked, min=0)
-    product = torch.prod(clamped, dim=0)
-    m = torch.zeros_like(product, dtype=torch.uint8, device=DEVICE)
-    m[product > 0] = 1
-    return m
-
-
-def assert_size(x, y):
-    """Make sure x and y are equal powers of 2 """
-    assert x == y
-    assert x in [8, 16, 32, 64, 128, 256, 512, 1024]
-
-
 def lookup_table(size, dtype=DTYPE, device=DEVICE):
     """return a square table (size x size), of 2d points (x, y) in -1, 1"""
     xx, yy = torch.meshgrid(
@@ -123,15 +103,6 @@ class Render(torch.nn.Module):
             self.size, dtype=self.dtype, device=self.device)
         for t in tris:
             self.raster(t)
-
-    def aabb_idx(self, tri):
-        """
-        Return the (x, y) indices of points within the triangle AABB.
-        If the box is empty the coords will be None, None
-        """
-        bb = aabb(tri)
-        x, y = box2pts(bb, self.size)
-        return x, y
 
     def raster(self, tri):
         """
