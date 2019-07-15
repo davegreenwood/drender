@@ -6,6 +6,8 @@ from drender.utils import Rcube
 from drender.render import Render
 from h5flame.model import Flame
 
+DTYPE = torch.float
+DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 # -----------------------------------------------------------------------------
 # TESTING
@@ -17,7 +19,7 @@ if __name__ == "__main__":
     model = Flame()
     tris = torch.from_numpy(model.v[model.f].astype(np.float32))
     tris *= 4
-    tris.to(device)
+    tris.to(dtype=DTYPE, device=DEVICE)
     rnd = Render(size)
 
     t0 = time.time()
