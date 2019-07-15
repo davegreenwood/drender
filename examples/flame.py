@@ -2,7 +2,6 @@ import torch
 import time
 import numpy as np
 from PIL import Image
-from drender.utils import Rcube
 from drender.render import Render
 from h5flame.model import Flame
 
