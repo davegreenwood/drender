@@ -21,7 +21,7 @@ if __name__ == "__main__":
     print(f"time: {t1-t0:0.2f}")
 
     # image out
-    img = rnd.result.numpy()[:, :, :3].squeeze()
+    img = rnd.result.cpu().numpy()[:, :, :3].squeeze()
     img -= img.min()
     img /= img.max()
     img *= 255
