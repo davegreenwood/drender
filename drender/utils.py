@@ -59,7 +59,8 @@ class Rcube:
         (v, f, uv, uvf), t = read_obj(RCUBE), ToTensor()
         self.v = torch.from_numpy(v).to(device)
         self.uv = torch.from_numpy(uv).to(device)
-        self.uvmap = t(Image.open(UVMAP).convert("RGB")).to(device)
+        self.uvmap = t(Image.open(UVMAP).transpose(
+            Image.FLIP_TOP_BOTTOM).convert("RGB")).to(device)
         self.f = torch.from_numpy(f).to(device)
         self.uvf = torch.from_numpy(uvf).to(device)
         self.device = device
