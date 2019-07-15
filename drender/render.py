@@ -91,14 +91,14 @@ class Render(torch.nn.Module):
         self.uvmap = uvmap
 
     def forward(self, tris):
-        super(Render, self).forward()
-        return self.render(tris)
+        self.render(tris)
+        return self.result
 
     def render(self, tris):
         """do render """
         zmin = tris.view(-1).view(-1, 3).min(0)[0][-1]
         self.result = torch.zeros(
-            [self.size, self.size, 4], dtype=self.dtype, device=self.device)
+            [4, self.size, self.size], dtype=self.dtype, device=self.device)
         self.zbuffer = zmin * torch.ones(
             [self.size, self.size], dtype=self.dtype, device=self.device)
         self.pts = lookup_table(
@@ -147,7 +147,7 @@ class Render(torch.nn.Module):
         ptsUV = w1[..., None] * uv1 + w2[..., None] * uv2 + w3[..., None] * uv3
         rgb = torch.grid_sampler_2d(
             self.uvmap[None, ...], ptsUV[None, ...],
-            0, 0).squeeze_().permute(1, 2, 0)
+            0, 0)[0, :3, ...]
 
         # keep points that are nearer than existing zbuffer
         zbf_msk = pts3d[:, :, 2] >= self.zbuffer[xmin:xmax, ymin:ymax]
@@ -159,5 +159,5 @@ class Render(torch.nn.Module):
 
         # fill buffers
         self.zbuffer[xmin:xmax, ymin:ymax][rmsk] = pts3d[:, :, 2][rmsk]
-        self.result[xmin:xmax, ymin:ymax, :3][rmsk] = rgb[rmsk]
-        self.result[xmin:xmax, ymin:ymax, 3][rmsk] = 1.0
+        self.result[:3, xmin:xmax, ymin:ymax][..., rmsk] = rgb[..., rmsk]
+        self.result[3, xmin:xmax, ymin:ymax][rmsk] = 1.0
