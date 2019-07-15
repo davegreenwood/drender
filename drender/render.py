@@ -76,16 +76,19 @@ def lookup_table(size, dtype=DTYPE, device=DEVICE):
 class Render(torch.nn.Module):
     """Render trangles in view space (-1, 1,)"""
 
-    def __init__(self, size):
+    def __init__(self, size, uvs, uvmap):
         super(Render, self).__init__()
         device = DEVICE
+        dtype = DTYPE
         self.pts = None
         self.result = None
         self.zmin = 0.0
         self.size = size
-        self.dtype = torch.float
+        self.dtype = dtype
         self.device = device
         self.aabb2idx = AABB.apply
+        self.uvs = uvs.to(dtype=dtype, device=device) * 2.0 - 1.0
+        self.uvmap = uvmap
 
     def forward(self, tris):
         super(Render, self).forward()
@@ -100,10 +103,11 @@ class Render(torch.nn.Module):
             [self.size, self.size], dtype=self.dtype, device=self.device)
         self.pts = lookup_table(
             self.size, dtype=self.dtype, device=self.device)
-        for t in tris:
-            self.raster(t)
 
-    def raster(self, tri):
+        for t, uv in zip(tris, self.uvs):
+            self.raster(t, uv)
+
+    def raster(self, tri, uv):
         """
         triangle tri, iff the point is in the triangle.
         tri : tensor 3 x 2 (3 points by (x, y))
@@ -138,6 +142,13 @@ class Render(torch.nn.Module):
         v1, v2, v3, = tri
         pts3d = w1[..., None] * v1 + w2[..., None] * v2 + w3[..., None] * v3
 
+        # interpolated uvs for rgb
+        uv1, uv2, uv3 = uv
+        ptsUV = w1[..., None] * uv1 + w2[..., None] * uv2 + w3[..., None] * uv3
+        rgb = torch.grid_sampler_2d(
+            self.uvmap[None, ...], ptsUV[None, ...],
+            0, 0).squeeze_().permute(1, 2, 0)
+
         # keep points that are nearer than existing zbuffer
         zbf_msk = pts3d[:, :, 2] >= self.zbuffer[xmin:xmax, ymin:ymax]
         if zbf_msk.sum() == 0:
@@ -148,5 +159,5 @@ class Render(torch.nn.Module):
 
         # fill buffers
         self.zbuffer[xmin:xmax, ymin:ymax][rmsk] = pts3d[:, :, 2][rmsk]
-        self.result[xmin:xmax, ymin:ymax, :3][rmsk] = pts3d[:, :, :3][rmsk]
+        self.result[xmin:xmax, ymin:ymax, :3][rmsk] = rgb[rmsk]
         self.result[xmin:xmax, ymin:ymax, 3][rmsk] = 1.0

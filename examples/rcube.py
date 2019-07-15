@@ -10,10 +10,10 @@ from drender.render import Render
 
 if __name__ == "__main__":
     # set defaults
-    size = 256
+    size = 1024
     rcube = Rcube()
-    rnd = Render(size)
-    tris, uvs = rcube.tris()
+    tris, uvs, uvmap = rcube.get_data()
+    rnd = Render(size, uvs, uvmap)
 
     t0 = time.time()
     rnd.render(tris)

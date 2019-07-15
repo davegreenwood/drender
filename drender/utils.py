@@ -64,11 +64,11 @@ class Rcube:
         self.uvf = torch.from_numpy(uvf).to(device)
         self.device = device
 
-    def tris(self):
+    def get_data(self):
         """Triangles as tensors.
-        returns tuple: (vertex_triangles, uv_triangles)
+        returns tuple: (vertex_triangles, uv_triangles, uvmap)
         """
-        return self.v[self.f], self.uv[self.uvf]
+        return self.v[self.f], self.uv[self.uvf], self.uvmap
 
     def get_uvmap(self):
         """Return the uvmap image as PIL image """
