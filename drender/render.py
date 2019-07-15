@@ -43,28 +43,26 @@ class AABB(torch.autograd.Function):
         return grad_input, None
 
 
-def area2d(a, b, c, dtype=DTYPE, device=DEVICE):
+def area2d(a, b, c):
     """
     Vectorised area of 2d parallelogram (divide by 2 for triangle)
     (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)
     NB: colinear points result in zero area.
     """
-    w = (b[0] - a[..., 0]) * (c[1] - a[..., 1]) - \
-        (b[1] - a[..., 1]) * (c[0] - a[..., 0])
-    # w.to(dtype=dtype, device=device)
+    w = (b[..., 0] - a[..., 0]) * (c[..., 1] - a[..., 1]) - \
+        (b[..., 1] - a[..., 1]) * (c[..., 0] - a[..., 0])
     return w
 
 
-def barys(pAB, pBC, w, tri, dtype=DTYPE, device=DEVICE):
+def barys(pCB, pCA, w, tri):
     """
     Sub triangle areas to barycentric, mult by tri vertices.
     """
-    w1 = pAB / w
-    w2 = pBC / w
+    w1 = pCB / w
+    w2 = pCA / w
     w3 = 1.0 - w1 - w2
     v1, v2, v3, = tri
     b = w1[..., None] * v1 + w2[..., None] * v2 + w3[..., None] * v3
-    b.to(dtype=dtype, device=device)
     return b
 
 
@@ -74,7 +72,6 @@ def lookup_table(size, dtype=DTYPE, device=DEVICE):
         [torch.linspace(-1.0, 1.0, size, dtype=dtype, device=device),
          torch.linspace(-1.0, 1.0, size, dtype=dtype, device=device)])
     t = torch.stack([xx, yy], dim=-1)
-    # t.to(dtype=dtype, device=device)
     return t
 
 
@@ -122,24 +119,24 @@ class Render(torch.nn.Module):
         xmin, ymin, xmax, ymax = self.aabb2idx(aabb, self.size)
 
         # signed area of tri - free back face cull here
-        w = area2d(tri2d[None, 0], tri2d[1], tri2d[2])
+        w = area2d(tri2d[0], tri2d[1], tri2d[2])
         if w < 1e-9:
             return None
 
         # signed area of subtriangles, NB: any could be zero
         pts = self.pts[xmin:xmax, ymin:ymax, :]
-        pAB = area2d(pts, tri2d[0], tri2d[1])
-        pBC = area2d(pts, tri2d[1], tri2d[2])
-        pCA = area2d(pts, tri2d[2], tri2d[0])
+        pAB = area2d(tri2d[1], pts, tri2d[0])
+        pCB = area2d(tri2d[2], pts, tri2d[1])
+        pCA = area2d(tri2d[0], pts, tri2d[2])
 
         # mask for pts that are in the triangle,
         pts_msk = torch.clamp(pAB, min=0) * \
-            torch.clamp(pBC, min=0) * torch.clamp(pCA, min=0) > 0
+            torch.clamp(pCB, min=0) * torch.clamp(pCA, min=0) > 0
         if pts_msk.sum() == 0:
             return None
 
         # interpolated 3d pixels to consider for render
-        pts3d = barys(pAB, pBC, w, tri)
+        pts3d = barys(pCB, pCA, w, tri)
 
         # keep points that are nearer than existing zbuffer
         zbf_msk = pts3d[:, :, 2] >= self.zbuffer[xmin:xmax, ymin:ymax]
