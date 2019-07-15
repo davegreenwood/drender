@@ -17,8 +17,6 @@ class AABB(torch.autograd.Function):
         """
         aabb is a tensor we want to clamp to -1, 1 then scale to screen space.
         """
-        device = aabb.device
-        dtype = aabb.dtype
         aabb = torch.clamp(aabb.detach(), min=-1, max=1)
         aabb += 1.0
         aabb /= 2
@@ -26,10 +24,8 @@ class AABB(torch.autograd.Function):
 
         ctx.save_for_backward(aabb)
         ctx.save_for_backward(size)
-        ctx.save_for_backward(device)
-        ctx.save_for_backward(dtype)
         aabb = aabb.long()
-        aabb.to(dtype=dtype, device=device)
+        aabb.to(device=DEVICE)
         return aabb
 
     @staticmethod
@@ -37,14 +33,13 @@ class AABB(torch.autograd.Function):
         """
         backward pass.
         """
-        aabb, size, device, dtype = ctx.saved_tensors
+        aabb, size = ctx.saved_tensors
         grad_input = grad_output.clone()
 
         grad_input[aabb < 0] = 0
         grad_input[aabb > size] = size
         grad_input /= size
         grad_input *= 2
-        grad_input.to(dtype=dtype, device=device)
         return grad_input, None
 
 
@@ -56,7 +51,7 @@ def area2d(a, b, c, dtype=DTYPE, device=DEVICE):
     """
     w = (b[0] - a[..., 0]) * (c[1] - a[..., 1]) - \
         (b[1] - a[..., 1]) * (c[0] - a[..., 0])
-    w.to(dtype=dtype, device=device)
+    # w.to(dtype=dtype, device=device)
     return w
 
 
@@ -79,7 +74,7 @@ def lookup_table(size, dtype=DTYPE, device=DEVICE):
         [torch.linspace(-1.0, 1.0, size, dtype=dtype, device=device),
          torch.linspace(-1.0, 1.0, size, dtype=dtype, device=device)])
     t = torch.stack([xx, yy], dim=-1)
-    t.to(dtype=dtype, device=device)
+    # t.to(dtype=dtype, device=device)
     return t
 
 
@@ -111,7 +106,6 @@ class Render(torch.nn.Module):
         self.pts = lookup_table(
             self.size, dtype=self.dtype, device=self.device)
         for t in tris:
-            t.to(self.device)
             self.raster(t)
 
     def raster(self, tri):
