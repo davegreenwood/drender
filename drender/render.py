@@ -79,14 +79,14 @@ class Render(torch.nn.Module):
 
     def __init__(self, size):
         super(Render, self).__init__()
-        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        dtype = torch.float
+        device = DEVICE
         self.pts = None
         self.result = None
         self.zmin = 0.0
         self.size = size
-        self.dtype = dtype
+        self.dtype = torch.float
         self.device = device
+        self.aabb2idx = AABB.apply
 
     def forward(self, tris):
         super(Render, self).forward()
@@ -98,7 +98,7 @@ class Render(torch.nn.Module):
         self.result = torch.zeros(
             [self.size, self.size, 4], dtype=self.dtype, device=self.device)
         self.zbuffer = zmin * torch.ones(
-            [self.size, self.size, 1], dtype=self.dtype, device=self.device)
+            [self.size, self.size], dtype=self.dtype, device=self.device)
         self.pts = lookup_table(
             self.size, dtype=self.dtype, device=self.device)
         for t in tris:
@@ -113,43 +113,39 @@ class Render(torch.nn.Module):
         # mostly 2d - assuming the triangle is in view space
         tri2d = tri[:, :2]
 
-        # index to everything - flip x, y to rotate image
-        x, y = self.aabb_idx(tri2d)
-        if x.shape[0] == 0:
-            return None
+        # index to everything
+        aabb = torch.cat([tri2d.min(dim=0)[0], tri2d.max(dim=0)[0]])
+        xmin, ymin, xmax, ymax = self.aabb2idx(aabb, self.size)
 
-        # signed area of tri - could do back face cull here
+        # signed area of tri - free back face cull here
         w = area2d(tri2d[None, 0], tri2d[1], tri2d[2])
-        if torch.isclose(w, torch.zeros_like(w)):
+        if w < 1e-9:
             return None
 
         # signed area of subtriangles, NB: any could be zero
-        pts = self.pts[x, y, :]
+        pts = self.pts[xmin:xmax, ymin:ymax, :]
         pAB = area2d(pts, tri2d[0], tri2d[1])
         pBC = area2d(pts, tri2d[1], tri2d[2])
         pCA = area2d(pts, tri2d[2], tri2d[0])
 
         # mask for pts that are in the triangle,
-        pts_msk = inside_mask(pAB, pBC, pCA)
-        if torch.allclose(pts_msk, torch.zeros_like(pts_msk)):
+        pts_msk = torch.clamp(pAB, min=0) * \
+            torch.clamp(pBC, min=0) * torch.clamp(pCA, min=0) > 0
+        if pts_msk.sum() == 0:
             return None
 
         # interpolated 3d pixels to consider for render
-        pts3d = barys(pAB[pts_msk], pBC[pts_msk], w, tri)
+        pts3d = barys(pAB, pBC, w, tri)
 
         # keep points that are nearer than existing zbuffer
-        zbuffer = self.zbuffer[x[pts_msk], y[pts_msk], :].view(-1)
-        zpoints = pts3d[:, 2].view(-1)
-        zbf_msk = torch.zeros_like(pts_msk)
-        zbf_msk[pts_msk] = zpoints >= zbuffer
-
-        if torch.allclose(zbf_msk, torch.zeros_like(zbf_msk)):
+        zbf_msk = pts3d[:, :, 2] >= self.zbuffer[xmin:xmax, ymin:ymax]
+        if zbf_msk.sum() == 0:
             return None
 
-        # render points that are nearer and in triangle
-        rnd_msk = pts_msk * zbf_msk
+        # render points that are nearer AND in triangle
+        rmsk = pts_msk * zbf_msk
 
         # fill buffers
-        self.zbuffer[x[rnd_msk], y[rnd_msk], 0] = pts3d[:, 2]
-        self.result[x[rnd_msk], y[rnd_msk], :3] = pts3d[:, :3]
-        self.result[x[rnd_msk], y[rnd_msk], 3] = 1.0
+        self.zbuffer[xmin:xmax, ymin:ymax][rmsk] = pts3d[:, :, 2][rmsk]
+        self.result[xmin:xmax, ymin:ymax, :3][rmsk] = pts3d[:, :, :3][rmsk]
+        self.result[xmin:xmax, ymin:ymax, 3][rmsk] = 1.0
