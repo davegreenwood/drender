@@ -29,7 +29,7 @@ class AABB(torch.autograd.Function):
         ctx.save_for_backward(device)
         ctx.save_for_backward(dtype)
         aabb = aabb.long()
-        aabb.to(device)
+        aabb.to(dtype=dtype, device=device)
         return aabb
 
     @staticmethod
@@ -44,8 +44,7 @@ class AABB(torch.autograd.Function):
         grad_input[aabb > size] = size
         grad_input /= size
         grad_input *= 2
-        grad_input.to(dtype)
-        grad_input.to(device)
+        grad_input.to(dtype=dtype, device=device)
 
         return grad_input, None
 
@@ -58,8 +57,7 @@ def area2d(a, b, c, dtype=DTYPE, device=DEVICE):
     """
     w = (b[0] - a[..., 0]) * (c[1] - a[..., 1]) - \
         (b[1] - a[..., 1]) * (c[0] - a[..., 0])
-    w.to(dtype)
-    w.to(device)
+    w.to(dtype=dtype, device=device)
     return w
 
 
@@ -73,8 +71,7 @@ def barys(pAB, pBC, w, tri, dtype=DTYPE, device=DEVICE):
     w3 = 1.0 - w1 - w2
     v1, v2, v3, = tri
     b = w1[..., None] * v1 + w2[..., None] * v2 + w3[..., None] * v3
-    b.to(dtype)
-    b.to(device)
+    b.to(dtype=dtype, device=device)
     return b
 
 
@@ -114,6 +111,7 @@ class Render(torch.nn.Module):
         self.pts = lookup_table(
             self.size, dtype=self.dtype, device=self.device)
         for t in tris:
+            t.to(self.device)
             self.raster(t)
 
     def raster(self, tri):
