@@ -45,7 +45,6 @@ class AABB(torch.autograd.Function):
         grad_input /= size
         grad_input *= 2
         grad_input.to(dtype=dtype, device=device)
-
         return grad_input, None
 
 
@@ -65,7 +64,6 @@ def barys(pAB, pBC, w, tri, dtype=DTYPE, device=DEVICE):
     """
     Sub triangle areas to barycentric, mult by tri vertices.
     """
-    assert w > 0
     w1 = pAB / w
     w2 = pBC / w
     w3 = 1.0 - w1 - w2
@@ -80,7 +78,9 @@ def lookup_table(size, dtype=DTYPE, device=DEVICE):
     xx, yy = torch.meshgrid(
         [torch.linspace(-1.0, 1.0, size, dtype=dtype, device=device),
          torch.linspace(-1.0, 1.0, size, dtype=dtype, device=device)])
-    return torch.stack([xx, yy], dim=-1)
+    t = torch.stack([xx, yy], dim=-1)
+    t.to(dtype=dtype, device=device)
+    return t
 
 
 class Render(torch.nn.Module):
