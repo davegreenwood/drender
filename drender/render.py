@@ -47,8 +47,8 @@ def area2d(a, b, c):
     (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)
     NB: colinear points result in zero area.
     """
-    return (b[0] - a[:, 0]) * (c[1] - a[:, 1]) - \
-        (b[1] - a[:, 1]) * (c[0] - a[:, 0])
+    return (b[0] - a[..., 0]) * (c[1] - a[..., 1]) - \
+        (b[1] - a[..., 1]) * (c[0] - a[..., 0])
 
 
 def barys(pAB, pBC, w, tri):
