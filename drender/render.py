@@ -44,17 +44,19 @@ class AABB(torch.autograd.Function):
         return grad_input, None
 
 
-def area2d(a, b, c):
+def area2d(a, b, c, device=DEVICE):
     """
     Vectorised area of 2d parallelogram (divide by 2 for triangle)
     (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)
     NB: colinear points result in zero area.
     """
-    return (b[0] - a[..., 0]) * (c[1] - a[..., 1]) - \
+    w = (b[0] - a[..., 0]) * (c[1] - a[..., 1]) - \
         (b[1] - a[..., 1]) * (c[0] - a[..., 0])
+    w.to(device)
+    return w
 
 
-def barys(pAB, pBC, w, tri):
+def barys(pAB, pBC, w, tri, device=DEVICE):
     """
     Sub triangle areas to barycentric, mult by tri vertices.
     """
@@ -63,7 +65,9 @@ def barys(pAB, pBC, w, tri):
     w2 = pBC / w
     w3 = 1.0 - w1 - w2
     v1, v2, v3, = tri
-    return w1[..., None] * v1 + w2[..., None] * v2 + w3[..., None] * v3
+    b = w1[..., None] * v1 + w2[..., None] * v2 + w3[..., None] * v3
+    b.to(device)
+    return b
 
 
 def lookup_table(size, dtype=DTYPE, device=DEVICE):
