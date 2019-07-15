@@ -1,3 +1,3 @@
-# Rasterize Triangles
+# Raster Triangles
 
-Based on a simple in out test in triangles.
+Pytorch triangle raster.
