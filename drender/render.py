@@ -54,16 +54,14 @@ def area2d(a, b, c):
     return w
 
 
-def barys(pCB, pCA, w, tri):
+def barys(pCB, pCA, w):
     """
-    Sub triangle areas to barycentric, mult by tri vertices.
+    Sub triangle areas to barycentric.
     """
     w1 = pCB / w
     w2 = pCA / w
     w3 = 1.0 - w1 - w2
-    v1, v2, v3, = tri
-    b = w1[..., None] * v1 + w2[..., None] * v2 + w3[..., None] * v3
-    return b
+    return w1, w2, w3
 
 
 def lookup_table(size, dtype=DTYPE, device=DEVICE):
@@ -136,7 +134,9 @@ class Render(torch.nn.Module):
             return None
 
         # interpolated 3d pixels to consider for render
-        pts3d = barys(pCB, pCA, w, tri)
+        w1, w2, w3 = barys(pCB, pCA, w)
+        v1, v2, v3, = tri
+        pts3d = w1[..., None] * v1 + w2[..., None] * v2 + w3[..., None] * v3
 
         # keep points that are nearer than existing zbuffer
         zbf_msk = pts3d[:, :, 2] >= self.zbuffer[xmin:xmax, ymin:ymax]
