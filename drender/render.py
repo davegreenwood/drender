@@ -2,7 +2,7 @@
 import torch
 
 DTYPE = torch.float
-DEVICE = "cpu"
+DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 def backface_cull(tris):
