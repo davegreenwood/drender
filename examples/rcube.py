@@ -21,5 +21,5 @@ if __name__ == "__main__":
     print(f"time: {t1-t0:0.2f}")
 
     # image out
-    img = topil(result)
+    img = topil(result.cpu())
     img.convert("RGB").save("rcube.jpg")
