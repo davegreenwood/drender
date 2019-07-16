@@ -64,6 +64,12 @@ def barys(pCB, pCA, w):
     return w1, w2, w3
 
 
+def bary_interp(tri, w1, w2, w3):
+    """bary centric weights to points in triangle - 2d or 3d"""
+    v1, v2, v3, = tri
+    return w1[..., None] * v1 + w2[..., None] * v2 + w3[..., None] * v3
+
+
 def lookup_table(size, dtype=DTYPE, device=DEVICE):
     """return a square table (size x size), of 2d points (x, y) in -1, 1"""
     xx, yy = torch.meshgrid(
@@ -137,17 +143,17 @@ class Render(torch.nn.Module):
         if pts_msk.sum() == 0:
             return None
 
-        # interpolated 3d pixels to consider for render
+        # barycentric coordinates
         w1, w2, w3 = barys(pCB, pCA, w)
-        v1, v2, v3, = tri
-        pts3d = w1[..., None] * v1 + w2[..., None] * v2 + w3[..., None] * v3
+
+        # interpolated 3d pixels to consider for render
+        pts3d = bary_interp(tri, w1, w2, w3)
 
         # interpolated uvs for rgb
-        uv1, uv2, uv3 = uv
-        ptsUV = w1[..., None] * uv1 + w2[..., None] * uv2 + w3[..., None] * uv3
+        ptsUV = bary_interp(uv, w1, w2, w3)
+
         rgb = torch.grid_sampler_2d(
-            self.uvmap[None, ...], ptsUV[None, ...],
-            0, 0)[0, :3, ...]
+            self.uvmap[None, ...], ptsUV[None, ...], 0, 0)[0, :3, ...]
 
         # keep points that are nearer than existing zbuffer
         zbf_msk = pts3d[:, :, 2] >= self.zbuffer[xmin:xmax, ymin:ymax]
