@@ -17,10 +17,11 @@ class AABB(torch.autograd.Function):
         """
         aabb is a tensor we want to clamp to -1, 1 then scale to screen space.
         """
-        aabb = torch.clamp(aabb.detach(), min=-1, max=1)
         aabb += 1.0
         aabb /= 2
         aabb *= size
+        aabb += torch.tensor((0., 0., 1., 1.))
+        aabb = torch.clamp(aabb.detach(), min=0, max=size)
 
         ctx.save_for_backward(aabb)
         ctx.save_for_backward(size)
