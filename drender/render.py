@@ -93,9 +93,15 @@ class Render(torch.nn.Module):
         self.size = size
         self.dtype = dtype
         self.device = device
-        self.aabb2idx = AABB.apply
+        self.aabbfn = AABB.apply
         self.uvs = uvs.to(dtype=dtype, device=device) * 2.0 - 1.0
         self.uvmap = uvmap
+
+    def aabb2idx(self, tri):
+        """Convert bounding box of 2d triangle to indexing values."""
+        aabb = torch.cat([tri.min(dim=0)[0], tri.max(dim=0)[0]])
+        xmin, ymin, xmax, ymax = self.aabbfn(aabb, self.size)
+        return self.size - ymax, self.size - ymin, xmin, xmax
 
     def forward(self, tris):
         self.render(tris)
@@ -123,17 +129,16 @@ class Render(torch.nn.Module):
         # mostly 2d - assuming the triangle is in view space
         tri2d = tri[:, :2]
 
-        # index to everything
-        aabb = torch.cat([tri2d.min(dim=0)[0], tri2d.max(dim=0)[0]])
-        xmin, ymin, xmax, ymax = self.aabb2idx(aabb, self.size)
-
         # signed area of tri - free back face cull here
         w = area2d(tri2d[0], tri2d[1], tri2d[2])
         if w < 1e-9:
             return None
 
+        # index to everything
+        r1, r2, c1, c2 = self.aabb2idx(tri2d)
+
         # signed area of subtriangles, NB: any could be zero
-        pts = self.pts[xmin:xmax, ymin:ymax, :]
+        pts = self.pts[r1:r2, c1:c2, :]
         pAB = area2d(tri2d[1], pts, tri2d[0])
         pCB = area2d(tri2d[2], pts, tri2d[1])
         pCA = area2d(tri2d[0], pts, tri2d[2])
@@ -165,6 +170,6 @@ class Render(torch.nn.Module):
         rmsk = pts_msk * zbf_msk
 
         # fill buffers
-        self.zbuffer[xmin:xmax, ymin:ymax][rmsk] = pts3d[:, :, 2][rmsk]
-        self.result[:3, xmin:xmax, ymin:ymax][..., rmsk] = rgb[..., rmsk]
-        self.result[3, xmin:xmax, ymin:ymax][rmsk] = 1.0
+        self.zbuffer[r1:r2, c1:c2][rmsk] = pts3d[:, :, 2][rmsk]
+        self.result[:3, r1:r2, c1:c2][..., rmsk] = rgb[..., rmsk]
+        self.result[3, r1:r2, c1:c2][rmsk] = 1.0
