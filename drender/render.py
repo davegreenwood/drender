@@ -20,7 +20,7 @@ class AABB(torch.autograd.Function):
         aabb += 1.0
         aabb /= 2
         aabb *= size
-        aabb += torch.tensor((0., 0., 1., 1.))
+        aabb += torch.tensor((0., 0., 1., 1.), dtype=DTYPE, device=DEVICE)
         aabb = torch.clamp(aabb.detach(), min=0, max=size)
 
         ctx.save_for_backward(aabb)
