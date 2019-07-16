@@ -150,16 +150,16 @@ class Render(torch.nn.Module):
         # interpolated 3d pixels to consider for render
         pts3d = bary_interp(tri, w1, w2, w3)
 
+        # keep points that are nearer than existing zbuffer
+        zbf_msk = pts3d[:, :, 2] >= self.zbuffer[r1:r2, c1:c2]
+        if zbf_msk.sum() == 0:
+            return None
+
         # interpolated uvs for rgb
         ptsUV = bary_interp(uv, w1, w2, w3)
 
         rgb = torch.grid_sampler_2d(
             self.uvmap[None, ...], ptsUV[None, ...], 0, 0)[0, :3, ...]
-
-        # keep points that are nearer than existing zbuffer
-        zbf_msk = pts3d[:, :, 2] >= self.zbuffer[xmin:xmax, ymin:ymax]
-        if zbf_msk.sum() == 0:
-            return None
 
         # render points that are nearer AND in triangle
         rmsk = pts_msk * zbf_msk
