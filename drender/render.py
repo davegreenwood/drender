@@ -77,7 +77,7 @@ def lookup_table(size, dtype=DTYPE, device=DEVICE):
         [torch.linspace(-1.0, 1.0, size, dtype=dtype, device=device),
          torch.linspace(-1.0, 1.0, size, dtype=dtype, device=device)])
     t = torch.stack([xx, yy], dim=-1)
-    return t
+    return torch.rot90(t, 1)
 
 
 class Render(torch.nn.Module):
