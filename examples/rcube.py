@@ -1,5 +1,4 @@
 import time
-import numpy as np
 from torchvision.transforms import ToPILImage
 from drender.utils import Rcube
 from drender.render import Render

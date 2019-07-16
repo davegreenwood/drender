@@ -1,7 +1,7 @@
-import torch
 import time
-import numpy as np
-from PIL import Image
+import torch
+from torchvision.transforms import ToPILImage
+from drender.utils import Rcube
 from drender.render import Render
 from h5flame.model import Flame
 
@@ -13,22 +13,23 @@ DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 # -----------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    size = 256
+    topil = ToPILImage()
+    size = 1024
     model = Flame()
+    rcube = Rcube()
+    _, _, uvmap = rcube.get_data()
     tris = torch.tensor(model.v[model.f], dtype=DTYPE, device=DEVICE)
+    uvs = torch.tensor(model.uv[model.uvf], dtype=DTYPE, device=DEVICE)
     tris *= 4
+
     print(tris.dtype, tris.device)
-    rnd = Render(size)
+    rnd = Render(size, uvs, uvmap)
 
     t0 = time.time()
-    rnd.render(tris)
+    result = rnd.forward(tris)
     t1 = time.time()
     print(f"time: {t1-t0:0.2f}")
 
     # image out
-    img = rnd.result.cpu().numpy()[:, :, :3].squeeze()
-    img -= img.min()
-    img /= img.max()
-    img *= 255
-    Image.fromarray(img.astype(np.uint8)).convert("RGB").save("flame.jpg")
+    img = topil(result)
+    img.convert("RGB").save("flame.jpg")
