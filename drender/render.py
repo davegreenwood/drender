@@ -57,12 +57,20 @@ class Render(torch.nn.Module):
         self.aabbfn = AABB.apply
         self.uvs = uvs.to(dtype=dtype, device=device) * 2.0 - 1.0
         self.uvmap = uvmap
+        self.pts = None
+        self.result = None
+        self.zbuffer = None
+        self.dtype = DTYPE
+        self.device = DEVICE
 
-    def aabb2idx(self, tri):
-        """Convert bounding box of 2d triangle to indexing values."""
-        aabb = torch.cat([tri.min(dim=0)[0], tri.max(dim=0)[0]])
-        xmin, ymin, xmax, ymax = self.aabbfn(aabb, self.size)
-        return self.size - ymax, self.size - ymin, xmin, xmax
+    def aabbmsk(self, tri):
+        """Convert bounding box of 2d triangle to mask."""
+        (xmin, ymin), (xmax, ymax) = tri.min(dim=0)[0], tri.max(dim=0)[0]
+        msk_max = self.pts[..., 0] <= xmax
+        msk_max *= self.pts[..., 1] <= ymax
+        msk_min = self.pts[..., 0] >= xmin
+        msk_min *= self.pts[..., 1] >= ymin
+        return msk_min * msk_max
 
     def forward(self, tris):
         self.render(tris)
