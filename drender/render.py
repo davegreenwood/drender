@@ -46,16 +46,8 @@ class Render(torch.nn.Module):
 
     def __init__(self, size, uvs, uvmap):
         super(Render, self).__init__()
-        device = DEVICE
-        dtype = DTYPE
-        self.pts = None
-        self.result = None
-        self.zmin = 0.0
+        self.uvs = uvs.to(dtype=DTYPE, device=DEVICE) * 2.0 - 1.0
         self.size = size
-        self.dtype = dtype
-        self.device = device
-        self.aabbfn = AABB.apply
-        self.uvs = uvs.to(dtype=dtype, device=device) * 2.0 - 1.0
         self.uvmap = uvmap
         self.pts = None
         self.result = None
