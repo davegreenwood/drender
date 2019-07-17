@@ -70,16 +70,15 @@ class Render(torch.nn.Module):
 
     def render(self, tris):
         """do render """
-        zmin = tris.view(-1).view(-1, 3).min(0)[0][-1]
         self.result = torch.zeros(
-            [4, self.size, self.size], dtype=self.dtype, device=self.device)
-        self.zbuffer = zmin * torch.ones(
-            [self.size, self.size], dtype=self.dtype, device=self.device)
+            [4, self.size, self.size], dtype=DTYPE, device=DEVICE)
+        self.zbuffer = torch.zeros(
+            [self.size, self.size], dtype=DTYPE, device=DEVICE) + \
+            tris.view(-1).view(-1, 3).min(0)[0][-1]
         self.pts = lookup_table(
             self.size, dtype=self.dtype, device=self.device)
-
-        for t, uv in zip(tris, self.uvs):
-            self.raster(t, uv)
+        for tri, uv in zip(tris, self.uvs):
+            self.raster(tri, uv)
 
     def raster(self, tri, uv):
         """
