@@ -125,10 +125,7 @@ class Render(torch.nn.Module):
         ptsUV = bary_interp(uv, w1, w2, w3)
 
         rgb = torch.grid_sampler_2d(
-            self.uvmap[None, ...], ptsUV[None, ...], 0, 0)[0, :3, ...]
-
-        # render points that are nearer AND in triangle
-        rmsk = pts_msk * zbf_msk
+            self.uvmap[None, ...], ptsUV[None, None, ...], 0, 0).squeeze()
 
         # fill buffers
         self.zbuffer[r1:r2, c1:c2][rmsk] = pts3d[:, :, 2][rmsk]
