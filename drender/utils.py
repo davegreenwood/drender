@@ -2,6 +2,7 @@
 from pkg_resources import resource_filename
 import numpy as np
 import torch
+import cv2
 from torchvision.transforms import ToPILImage, ToTensor
 from PIL import Image
 
@@ -51,19 +52,44 @@ def backface_cull(tris):
     return tris[m > 0]
 
 
+class Rodrigues(torch.autograd.Function):
+    """Wrap the cv2 rodrigues function. """
+
+    @staticmethod
+    def forward(ctx, r):
+        dtype, device = r.dtype, r.device
+        _r = r.detach().cpu().numpy()
+        _rotm, _jacob = cv2.Rodrigues(_r)
+        jacob = torch.from_numpy(_jacob)
+        ctx.save_for_backward(jacob)
+        rotation_matrix = torch.from_numpy(_rotm)
+        rotation_matrix.requires_grad_(True)
+        rotation_matrix.to(dtype)
+        rotation_matrix.to(device)
+        return rotation_matrix
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        """grad_output is 3x3, grad_input is shape 3, """
+        jacob, = ctx.saved_tensors
+        # TODO: Check Jacobian is correct - 1x9 * 9x3 or 9x3 * 3*1
+        grad_input = jacob @ grad_output.view(-1, 1)
+        return grad_input.view(-1)
+
+
 class Rcube:
     """test object - a cube with the vertices rotated."""
 
     def __init__(self):
-        device = DEVICE
         (v, f, uv, uvf), t = read_obj(RCUBE), ToTensor()
-        self.v = torch.from_numpy(v).to(device)
-        self.uv = torch.from_numpy(uv).to(device)
+        self.v = torch.from_numpy(v).to(DEVICE)
+        self.uv = torch.from_numpy(uv).to(DEVICE)
+        self.f = torch.from_numpy(f).to(DEVICE)
+        self.uvf = torch.from_numpy(uvf).to(DEVICE)
         self.uvmap = t(Image.open(UVMAP).transpose(
-            Image.FLIP_TOP_BOTTOM).convert("RGB")).to(device)
-        self.f = torch.from_numpy(f).to(device)
-        self.uvf = torch.from_numpy(uvf).to(device)
-        self.device = device
+            Image.FLIP_TOP_BOTTOM).convert("RGB")).to(DEVICE)
+        self.uvs = self.uv[self.uvf]
+        self.device = DEVICE
 
     def get_data(self):
         """Triangles as tensors.
