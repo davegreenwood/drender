@@ -127,3 +127,31 @@ class Rcube:
         """Return the uvmap image as PIL image """
         t = ToPILImage()
         return t(self.uvmap)
+
+
+class Pcube(Rcube):
+    """A cube with parameters to rotate."""
+
+    def __init__(self):
+        super(Pcube, self).__init__()
+        self.v = torch.tensor([
+            [-0.5, -0.5, 0.5],
+            [0.5, -0.5, 0.5],
+            [-0.5, 0.5, 0.5],
+            [0.5, 0.5, 0.5],
+            [-0.5, 0.5, -0.5],
+            [0.5, 0.5, -0.5],
+            [-0.5, -0.5, -0.5],
+            [0.5, -0.5, -0.5],
+        ], dtype=DTYPE, device=DEVICE)
+        self.tris = self.v[self.f]
+        self.rodrigues_fn = Rodrigues.apply
+
+    def posed(self, r):
+        """
+        Triangles as tensors.
+        params: r a rotation value
+        returns tensor: 14*3*3
+        """
+        tris = self.rodrigues_fn(r) @ self.tris.permute(0, 2, 1)
+        return tris.permute(0, 2, 1).contiguous()
