@@ -13,6 +13,17 @@ DTYPE = torch.float
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
+def uvmap(fname=None, device=DEVICE):
+    """
+    Return the utility uvmap as a tensor. If fname is None uvmap will
+    be default, or if fname is a valid image - use that."""
+    fname = fname or UVMAP
+    t = ToTensor()
+    uv = t(Image.open(fname).transpose(
+        Image.FLIP_TOP_BOTTOM).convert("RGB")).to(device)
+    return uv
+
+
 def read_obj(fname):
     """Parse an obj file, return ndarray of correct data type."""
     v, vt, f, tf = [], [], [], []
