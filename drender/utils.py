@@ -42,7 +42,7 @@ def read_obj(fname):
             tf.append(t_faces)
 
     verts = np.array(v, dtype=np.float32)
-    uv = np.array(vt, dtype=np.float)
+    uv = np.array(vt, dtype=np.float32)
     faces = np.array(f, dtype=np.int64) - 1
     uvfaces = np.array(tf, dtype=np.int64) - 1
     return verts, faces, uv, uvfaces
