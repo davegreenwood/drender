@@ -48,6 +48,21 @@ def read_obj(fname):
     return verts, faces, uv, uvfaces
 
 
+def numpy_cube():
+    """Return numpy unit cube triangles. """
+    _, f, uv, uvf = read_obj(RCUBE)
+    v = np.array([
+        [-0.5, -0.5, 0.5],
+        [0.5, -0.5, 0.5],
+        [-0.5, 0.5, 0.5],
+        [0.5, 0.5, 0.5],
+        [-0.5, 0.5, -0.5],
+        [0.5, 0.5, -0.5],
+        [-0.5, -0.5, -0.5],
+        [0.5, -0.5, -0.5]], dtype=np.float32)
+    return v, f, uv, uvf
+
+
 def assert_size(x, y):
     """Make sure x and y are equal powers of 2 """
     assert x == y
