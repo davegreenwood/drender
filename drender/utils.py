@@ -69,15 +69,6 @@ def assert_size(x, y):
     assert x in [8, 16, 32, 64, 128, 256, 512, 1024]
 
 
-def backface_cull(tris):
-    """
-    Return only the triangles that face forward. Tris are assumed to be
-    in view space."""
-    normals = torch.cross(tris[:, 1] - tris[:, 0], tris[:, 2] - tris[:, 0])
-    m = torch.tensor([0, 0, 1.0], dtype=DTYPE, device=DEVICE) @ normals
-    return tris[m > 0]
-
-
 class Rodrigues(torch.autograd.Function):
     """Wrap the cv2 rodrigues function. """
 

@@ -41,6 +41,16 @@ def lookup_table(size, dtype=DTYPE, device=DEVICE):
     return torch.rot90(t, 1)
 
 
+def backface_cull(tris):
+    """
+    Return a mask for the triangles that face forward. Tris are assumed to be
+    in view space."""
+    dtype, device = tris.dtype, tris.device
+    normals = torch.cross(tris[:, 1] - tris[:, 0], tris[:, 2] - tris[:, 0])
+    m = torch.tensor([0, 0, 1.0], dtype=dtype, device=device) @ normals
+    return m > 0
+
+
 class Render(torch.nn.Module):
     """Render trangles in view space (-1, 1,)"""
 
