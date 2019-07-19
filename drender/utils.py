@@ -98,12 +98,12 @@ class Rcube:
     """test object - a cube with the vertices rotated."""
 
     def __init__(self):
-        (v, f, uv, uvf), t = read_obj(RCUBE), ToTensor()
+        (v, f, uv, uvf), totensor = read_obj(RCUBE), ToTensor()
         self.v = torch.from_numpy(v).to(DEVICE)
         self.uv = torch.from_numpy(uv).to(DEVICE)
         self.f = torch.from_numpy(f).to(DEVICE)
         self.uvf = torch.from_numpy(uvf).to(DEVICE)
-        self.uvmap = t(Image.open(UVMAP).transpose(
+        self.uvmap = totensor(Image.open(UVMAP).transpose(
             Image.FLIP_TOP_BOTTOM).convert("RGB")).to(DEVICE)
         self.uvs = self.uv[self.uvf]
         self.device = DEVICE
@@ -116,8 +116,8 @@ class Rcube:
 
     def get_uvmap(self):
         """Return the uvmap image as PIL image """
-        t = ToPILImage()
-        return t(self.uvmap)
+        topil = ToPILImage()
+        return topil(self.uvmap)
 
 
 class Pcube(Rcube):
