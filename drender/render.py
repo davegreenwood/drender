@@ -136,7 +136,7 @@ class Render(torch.nn.Module):
         ptsUV = bary_interp(uv, w1, w2, w3)
 
         rgb = torch.grid_sampler_2d(
-            self.uvmap[None, ...], ptsUV[None, None, ...], 0, 0).squeeze()
+            self.uvmap[None, ...], ptsUV[None, None, ...], 0, 0)[0, :, 0, :]
 
         # fill buffers
         self.zbuffer[bb_msk] = pts3d[pts_msk, 2]
