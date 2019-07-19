@@ -47,18 +47,32 @@ def backface_cull(tris):
     in view space."""
     dtype, device = tris.dtype, tris.device
     normals = torch.cross(tris[:, 1] - tris[:, 0], tris[:, 2] - tris[:, 0])
-    m = torch.tensor([0, 0, 1.0], dtype=dtype, device=device) @ normals
+    m = normals @ torch.tensor([0, 0, 1.0], dtype=dtype, device=device)
     return m > 0
 
 
 class Render(torch.nn.Module):
-    """Render trangles in view space (-1, 1,)"""
+    """
+    Render trangles in view space (-1, 1,).
+    args:
+        size: (int) the square size of the resulting image
+        faces: (tensor k * 3, int64) the indices to vertices to form triangles.
+        uv: (tensor m * 2) the uv coordinates in 0.0 - 1.0
+        uvfaces: (tensor n * 3, int64) the indices to uv to form triangles.
+        uvmap: (tensor 3 * x * y) upside down rgb image as tensor.
+        NB: faces, uv, uvfaces and uvmap are static data. Only vertex positions
+        change during rendering, which are passed to the forward function.
+    """
 
-    def __init__(self, size, uvs, uvmap):
+    def __init__(self, size, faces, uv, uvfaces, uvmap):
         super(Render, self).__init__()
-        self.uvs = uvs.to(dtype=DTYPE, device=DEVICE) * 2.0 - 1.0
+        self.uv = uv.to(dtype=DTYPE, device=DEVICE) * 2.0 - 1.0
+        self.f = faces.to(dtype=torch.int64, device=DEVICE)
+        self.uvf = uvfaces.to(dtype=torch.int64, device=DEVICE)
         self.size = size
         self.uvmap = uvmap
+        self.tris = None
+        self.uvs = None
         self.pts = None
         self.result = None
         self.zbuffer = None
@@ -72,20 +86,27 @@ class Render(torch.nn.Module):
         msk_min = (self.pts[..., 0] >= xmin) * (self.pts[..., 1] >= ymin)
         return msk_min * msk_max
 
+    def cull(self, vertices):
+        """back face cull"""
+        mask = backface_cull(vertices[self.f])
+        self.tris = vertices[self.f][mask]
+        self.uvs = self.uv[self.uvf][mask]
+
     def forward(self, tris):
         self.render(tris)
         return self.result
 
-    def render(self, tris):
+    def render(self, vertices):
         """do render """
         self.result = torch.zeros(
             [4, self.size, self.size], dtype=DTYPE, device=DEVICE)
         self.zbuffer = torch.zeros(
             [self.size, self.size], dtype=DTYPE, device=DEVICE) + \
-            tris.view(-1).view(-1, 3).min(0)[0][-1]
+            vertices.min(0)[0][-1]
         self.pts = lookup_table(
             self.size, dtype=self.dtype, device=self.device)
-        for tri, uv in zip(tris, self.uvs):
+        self.cull(vertices)
+        for tri, uv in zip(self.tris, self.uvs):
             self.raster(tri, uv)
 
     def raster(self, tri, uv):

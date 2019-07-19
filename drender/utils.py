@@ -105,14 +105,7 @@ class Rcube:
         self.uvf = torch.from_numpy(uvf).to(DEVICE)
         self.uvmap = totensor(Image.open(UVMAP).transpose(
             Image.FLIP_TOP_BOTTOM).convert("RGB")).to(DEVICE)
-        self.uvs = self.uv[self.uvf]
         self.device = DEVICE
-
-    def get_data(self):
-        """Triangles as tensors.
-        returns tuple: (vertex_triangles, uv_triangles, uvmap)
-        """
-        return self.v[self.f], self.uv[self.uvf], self.uvmap
 
     def get_uvmap(self):
         """Return the uvmap image as PIL image """
@@ -144,5 +137,5 @@ class Pcube(Rcube):
         params: r a rotation value
         returns tensor: 14*3*3
         """
-        tris = self.rodrigues_fn(r) @ self.tris.permute(0, 2, 1)
-        return tris.permute(0, 2, 1).contiguous()
+        v = self.rodrigues_fn(r) @ self.v.t()
+        return v.t()
