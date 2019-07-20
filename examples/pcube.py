@@ -11,6 +11,8 @@ DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 # TESTING
 # -----------------------------------------------------------------------------
 
+print(DEVICE)
+
 size = 256
 pcube = Pcube()
 

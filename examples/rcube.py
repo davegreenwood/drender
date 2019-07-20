@@ -1,24 +1,30 @@
 import time
+import torch
 from torchvision.transforms import ToPILImage
 from drender.utils import Rcube
 from drender.render import Render
+
+
+DTYPE = torch.float
+DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 # -----------------------------------------------------------------------------
 # TESTING
 # -----------------------------------------------------------------------------
 
-if __name__ == "__main__":
-    # set defaults
-    size = 1024
-    topil = ToPILImage()
-    rcube = Rcube()
-    rnd = Render(size, rcube.f, rcube.uv, rcube.uvf, rcube.uvmap)
+print(DEVICE)
 
-    t0 = time.time()
-    result = rnd.forward(rcube.v)
-    t1 = time.time()
-    print(f"time: {t1-t0:0.2f}")
+# set defaults
+size = 1024
+topil = ToPILImage()
+rcube = Rcube()
+rnd = Render(size, rcube.f, rcube.uv, rcube.uvf, rcube.uvmap)
 
-    # image out
-    img = topil(result.cpu())
-    img.convert("RGB").save("rcube.jpg")
+t0 = time.time()
+result = rnd.forward(rcube.v)
+t1 = time.time()
+print(f"time: {t1-t0:0.2f}")
+
+# image out
+img = topil(result.cpu())
+img.convert("RGB").save("rcube.jpg")
