@@ -69,11 +69,11 @@ class Render(torch.nn.Module):
         self.uv = uv.to(dtype=DTYPE, device=DEVICE) * 2.0 - 1.0
         self.f = faces.to(dtype=torch.int64, device=DEVICE)
         self.uvf = uvfaces.to(dtype=torch.int64, device=DEVICE)
+        self.pts = lookup_table(size, dtype=DTYPE, device=DEVICE)
         self.size = size
         self.uvmap = uvmap
         self.tris = None
         self.uvs = None
-        self.pts = None
         self.result = None
         self.zbuffer = None
         self.dtype = DTYPE
