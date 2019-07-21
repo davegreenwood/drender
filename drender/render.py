@@ -1,5 +1,6 @@
 """Render an object"""
 import torch
+from .utils import image2uvmap
 
 DTYPE = torch.float
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -221,7 +222,8 @@ class Reverse(Render):
         self.result[3, idx] = 1.0
 
     def render(self, vertices, image):
-        self.uvmap = image
+        """Image is a PIL rgb image """
+        self.uvmap = image2uvmap(image, self.device)
         self.result = torch.zeros(
             [4, self.size, self.size], dtype=DTYPE, device=DEVICE)
         tris, uvws = backface_cull(vertices[self.f])
