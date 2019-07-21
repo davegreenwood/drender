@@ -87,8 +87,6 @@ class Render(torch.nn.Module):
         self.pts = lookup_table(size, dtype=DTYPE, device=DEVICE)
         self.size = size
         self.uvmap = uvmap
-        self.tris = None
-        self.uvs = None
         self.result = None
         self.zbuffer = None
         self.dtype = DTYPE
@@ -102,13 +100,12 @@ class Render(torch.nn.Module):
         return msk_min * msk_max
 
     def cull(self, vertices):
-        """back face cull"""
+        """back face cull - return tuple of vert triangles and uv triangles"""
         mask = backface_cull(vertices[self.f])
-        self.tris = vertices[self.f][mask]
-        self.uvs = self.uv[self.uvf][mask]
+        return vertices[self.f][mask], self.uv[self.uvf][mask]
 
-    def forward(self, tris):
-        self.render(tris)
+    def forward(self, vertices):
+        self.render(vertices)
         return self.result
 
     def render(self, vertices):
@@ -118,10 +115,8 @@ class Render(torch.nn.Module):
         self.zbuffer = torch.zeros(
             [self.size, self.size], dtype=DTYPE, device=DEVICE) + \
             vertices.min(0)[0][-1]
-        self.pts = lookup_table(
-            self.size, dtype=self.dtype, device=self.device)
-        self.cull(vertices)
-        for tri, uv in zip(self.tris, self.uvs):
+        tris, uvs = self.cull(vertices)
+        for tri, uv in zip(tris, uvs):
             self.raster(tri, uv)
 
     def raster(self, tri, uv):
