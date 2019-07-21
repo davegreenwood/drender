@@ -13,15 +13,19 @@ DTYPE = torch.float
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
+def image2uvmap(image, device=DEVICE):
+    """From a PIL image return a UV map tensor."""
+    t = ToTensor()
+    return t(image.convert("RGB").transpose(Image.FLIP_TOP_BOTTOM)).to(device)
+
+
 def uvmap(fname=None, device=DEVICE):
     """
     Return the utility uvmap as a tensor. If fname is None uvmap will
     be default, or if fname is a valid image - use that."""
     fname = fname or UVMAP
-    t = ToTensor()
-    uv = t(Image.open(fname).transpose(
-        Image.FLIP_TOP_BOTTOM).convert("RGB")).to(device)
-    return uv
+    image = Image.open(fname)
+    return image2uvmap(image, device)
 
 
 def read_obj(fname):
@@ -87,7 +91,7 @@ class Rodrigues(torch.autograd.Function):
         """grad_output is 3x3, grad_input is shape 3, """
         jacob, = ctx.saved_tensors
         # TODO: Check Jacobian is correct - 1x9 * 9x3 or 9x3 * 3*1
-        grad_input = jacob @ grad_output.view(-1, 1)
+        grad_input = jacob @ grad_output.contiguous().view(-1, 1)
         return grad_input.view(-1)
 
 

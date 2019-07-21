@@ -1,5 +1,6 @@
 """Render an object"""
 import torch
+from .utils import image2uvmap
 
 DTYPE = torch.float
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -14,6 +15,21 @@ def area2d(a, b, c):
     w = (b[..., 0] - a[..., 0]) * (c[..., 1] - a[..., 1]) - \
         (b[..., 1] - a[..., 1]) * (c[..., 0] - a[..., 0])
     return w
+
+
+def subarea2d(pts, tri2d):
+    """The three sub areas of a point tested against a triangle in 2d."""
+    pAB = area2d(tri2d[1], pts, tri2d[0])
+    pCB = area2d(tri2d[2], pts, tri2d[1])
+    pCA = area2d(tri2d[0], pts, tri2d[2])
+    return pAB, pCB, pCA
+
+
+def points_mask(pAB, pCB, pCA):
+    """Return a mask: 1 if all areas > 0 else 0 """
+    return torch.clamp(pAB, min=0) * \
+        torch.clamp(pCB, min=0) * \
+        torch.clamp(pCA, min=0) > 0
 
 
 def barys(pCB, pCA, w):
@@ -69,11 +85,9 @@ class Render(torch.nn.Module):
         self.uv = uv.to(dtype=DTYPE, device=DEVICE) * 2.0 - 1.0
         self.f = faces.to(dtype=torch.int64, device=DEVICE)
         self.uvf = uvfaces.to(dtype=torch.int64, device=DEVICE)
+        self.pts = lookup_table(size, dtype=DTYPE, device=DEVICE)
         self.size = size
         self.uvmap = uvmap
-        self.tris = None
-        self.uvs = None
-        self.pts = None
         self.result = None
         self.zbuffer = None
         self.dtype = DTYPE
@@ -87,13 +101,13 @@ class Render(torch.nn.Module):
         return msk_min * msk_max
 
     def cull(self, vertices):
-        """back face cull"""
-        mask = backface_cull(vertices[self.f])
-        self.tris = vertices[self.f][mask]
-        self.uvs = self.uv[self.uvf][mask]
+        """back face cull - return tuple of vert triangles and uv triangles"""
+        tris = vertices[self.f]
+        mask = backface_cull(tris)
+        return tris[mask], self.uv[self.uvf][mask]
 
-    def forward(self, tris):
-        self.render(tris)
+    def forward(self, vertices):
+        self.render(vertices)
         return self.result
 
     def render(self, vertices):
@@ -103,10 +117,8 @@ class Render(torch.nn.Module):
         self.zbuffer = torch.zeros(
             [self.size, self.size], dtype=DTYPE, device=DEVICE) + \
             vertices.min(0)[0][-1]
-        self.pts = lookup_table(
-            self.size, dtype=self.dtype, device=self.device)
-        self.cull(vertices)
-        for tri, uv in zip(self.tris, self.uvs):
+        tris, uvs = self.cull(vertices)
+        for tri, uv in zip(tris, uvs):
             self.raster(tri, uv)
 
     def raster(self, tri, uv):
@@ -127,39 +139,95 @@ class Render(torch.nn.Module):
         bb_msk = self.aabbmsk(tri2d)
 
         # signed area of subtriangles, NB: any could be zero
-        pts = self.pts[bb_msk]
-        pAB = area2d(tri2d[1], pts, tri2d[0])
-        pCB = area2d(tri2d[2], pts, tri2d[1])
-        pCA = area2d(tri2d[0], pts, tri2d[2])
+        pAB, pCB, pCA = subarea2d(self.pts[bb_msk], tri2d)
 
         # mask for pts that are in the triangle,
-        pts_msk = torch.clamp(pAB, min=0) * \
-            torch.clamp(pCB, min=0) * torch.clamp(pCA, min=0) > 0
+        pts_msk = points_mask(pAB, pCB, pCA)
         if pts_msk.sum() == 0:
             return None
         bb_msk[bb_msk] = pts_msk
 
         # barycentric coordinates
-        w1, w2, w3 = barys(pCB, pCA, w)
+        w1, w2, w3 = barys(pCB[pts_msk], pCA[pts_msk], w)
 
         # interpolated 3d pixels to consider for render
         pts3d = bary_interp(tri, w1, w2, w3)
 
         # keep points that are nearer than existing zbuffer
-        zbf_msk = pts3d[pts_msk, 2] >= self.zbuffer[bb_msk]
+        zbf_msk = pts3d[:, 2] >= self.zbuffer[bb_msk]
         if zbf_msk.sum() == 0:
             return None
 
         bb_msk[bb_msk] = zbf_msk
-        pts_msk[pts_msk] = zbf_msk
 
         # interpolated uvs for rgb
-        ptsUV = bary_interp(uv, w1, w2, w3)
+        ptsUV = bary_interp(uv, w1[zbf_msk], w2[zbf_msk], w3[zbf_msk])
 
         rgb = torch.grid_sampler_2d(
             self.uvmap[None, ...], ptsUV[None, None, ...], 0, 0)[0, :, 0, :]
 
         # fill buffers
-        self.zbuffer[bb_msk] = pts3d[pts_msk, 2]
-        self.result[:3, bb_msk] = rgb[..., pts_msk]
+        self.zbuffer[bb_msk] = pts3d[zbf_msk, 2]
+        self.result[:3, bb_msk] = rgb
         self.result[3, bb_msk] = 1.0
+
+# -----------------------------------------------------------------------------
+# Reverse render - project the view to UV space
+# -----------------------------------------------------------------------------
+
+
+class Reverse(Render):
+    """
+    Project the vertices back to UV space.
+    Because the output projection is known, we can precompute the
+    rasterisation once, then each call to forward is much faster.
+    """
+
+    def __init__(self, size, faces, uv, uvfaces):
+        super(Reverse, self).__init__(size, faces, uv, uvfaces, None)
+        self.uvmap = None
+        self.wUV = None
+        self.uv_weights()
+
+    def uv_weights(self):
+        """
+        Similar to raster in super.
+        TODO: refactoring
+        """
+        self.wUV = []
+        for uvtri in self.uv[self.uvf]:
+            # no negative areas in UV space - no zbuffer
+            w = area2d(uvtri[0], uvtri[1], uvtri[2])
+            pAB, pCB, pCA = subarea2d(self.pts, uvtri)
+            pts_msk = points_mask(pAB, pCB, pCA)
+            w1, w2, w3 = barys(pCB[pts_msk], pCA[pts_msk], w)
+            idx = torch.nonzero(pts_msk)
+            self.wUV.append([idx, w1, w2, w3])
+
+    def cull(self, vertices):
+        """back face cull"""
+        tris = vertices[self.f]
+        mask = backface_cull(tris)
+        idx = torch.nonzero(mask)
+        return tris[mask], [self.wUV[i] for i in idx]
+
+    def forward(self, vertices, image):
+        self.render(vertices, image)
+        return self.result
+
+    def raster(self, tri2d, weights):
+        idx, w1, w2, w3 = weights
+        ptsUV = bary_interp(tri2d, w1, w2, w3)
+        rgb = torch.grid_sampler_2d(
+            self.uvmap[None, ...], ptsUV[None, None, ...], 0, 0)[0, :, 0, :]
+        self.result[:3, idx[:, 0], idx[:, 1]] = rgb
+        self.result[3, idx[:, 0], idx[:, 1]] = 1.0
+
+    def render(self, vertices, image):
+        """Image is a PIL rgb image """
+        self.uvmap = image2uvmap(image, self.device)
+        self.result = torch.zeros(
+            [4, self.size, self.size], dtype=DTYPE, device=DEVICE)
+        tris, uvws = self.cull(vertices)
+        for tri, uvw in zip(tris, uvws):
+            self.raster(tri[:, :2], uvw)
