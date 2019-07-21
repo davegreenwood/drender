@@ -16,6 +16,21 @@ def area2d(a, b, c):
     return w
 
 
+def subarea2d(pts, tri2d):
+    """The three sub areas of a point tested against a triangle in 2d."""
+    pAB = area2d(tri2d[1], pts, tri2d[0])
+    pCB = area2d(tri2d[2], pts, tri2d[1])
+    pCA = area2d(tri2d[0], pts, tri2d[2])
+    return pAB, pCB, pCA
+
+
+def pts_mask(pAB, pCB, pCA):
+    """Return a mask: 1 if all areas > 0 else 0 """
+    return torch.clamp(pAB, min=0) * \
+        torch.clamp(pCB, min=0) * \
+        torch.clamp(pCA, min=0) > 0
+
+
 def barys(pCB, pCA, w):
     """
     Sub triangle areas to barycentric.
