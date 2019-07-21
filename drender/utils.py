@@ -77,11 +77,9 @@ class Rodrigues(torch.autograd.Function):
         dtype, device = r.dtype, r.device
         _r = r.detach().cpu().numpy()
         _rotm, _jacob = cv2.Rodrigues(_r)
-        jacob = torch.from_numpy(_jacob)
+        jacob = torch.tensor(_jacob).to(dtype=dtype, device=device)
+        rotation_matrix = torch.tensor(_rotm).to(dtype=dtype, device=device)
         ctx.save_for_backward(jacob)
-        rotation_matrix = torch.from_numpy(_rotm)
-        rotation_matrix.requires_grad_(True)
-        rotation_matrix.to(dtype=dtype, device=device)
         return rotation_matrix
 
     @staticmethod
