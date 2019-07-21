@@ -137,41 +137,36 @@ class Render(torch.nn.Module):
         bb_msk = self.aabbmsk(tri2d)
 
         # signed area of subtriangles, NB: any could be zero
-        pts = self.pts[bb_msk]
-        pAB = area2d(tri2d[1], pts, tri2d[0])
-        pCB = area2d(tri2d[2], pts, tri2d[1])
-        pCA = area2d(tri2d[0], pts, tri2d[2])
+        pAB, pCB, pCA = subarea2d(self.pts[bb_msk], tri2d)
 
         # mask for pts that are in the triangle,
-        pts_msk = torch.clamp(pAB, min=0) * \
-            torch.clamp(pCB, min=0) * torch.clamp(pCA, min=0) > 0
+        pts_msk = pts_mask(pAB, pCB, pCA)
         if pts_msk.sum() == 0:
             return None
         bb_msk[bb_msk] = pts_msk
 
         # barycentric coordinates
-        w1, w2, w3 = barys(pCB, pCA, w)
+        w1, w2, w3 = barys(pCB[pts_msk], pCA[pts_msk], w)
 
         # interpolated 3d pixels to consider for render
         pts3d = bary_interp(tri, w1, w2, w3)
 
         # keep points that are nearer than existing zbuffer
-        zbf_msk = pts3d[pts_msk, 2] >= self.zbuffer[bb_msk]
+        zbf_msk = pts3d[:, 2] >= self.zbuffer[bb_msk]
         if zbf_msk.sum() == 0:
             return None
 
         bb_msk[bb_msk] = zbf_msk
-        pts_msk[pts_msk] = zbf_msk
 
         # interpolated uvs for rgb
-        ptsUV = bary_interp(uv, w1, w2, w3)
+        ptsUV = bary_interp(uv, w1[zbf_msk], w2[zbf_msk], w3[zbf_msk])
 
         rgb = torch.grid_sampler_2d(
             self.uvmap[None, ...], ptsUV[None, None, ...], 0, 0)[0, :, 0, :]
 
         # fill buffers
-        self.zbuffer[bb_msk] = pts3d[pts_msk, 2]
-        self.result[:3, bb_msk] = rgb[..., pts_msk]
+        self.zbuffer[bb_msk] = pts3d[zbf_msk, 2]
+        self.result[:3, bb_msk] = rgb
         self.result[3, bb_msk] = 1.0
 
 # -----------------------------------------------------------------------------
