@@ -163,3 +163,62 @@ class Render(torch.nn.Module):
         self.zbuffer[bb_msk] = pts3d[pts_msk, 2]
         self.result[:3, bb_msk] = rgb[..., pts_msk]
         self.result[3, bb_msk] = 1.0
+
+# -----------------------------------------------------------------------------
+# Reverse render - project the view to UV space
+# -----------------------------------------------------------------------------
+
+
+class Reverse(Render):
+    """
+    Project the vertices back to UV space.
+    Because the output projection is known, we can precompute the
+    rasterisation once, then each call to forward is much faster.
+    """
+
+    def __init__(self, size, faces, uv, uvfaces, uvmap):
+        super(Reverse, self).__init__(size, faces, uv, uvfaces, uvmap)
+        self.uvmap = None
+        self.wUV = None
+        self.get_uvpts()
+
+    def get_uvpts(self):
+        """
+        Similar to raster in super.
+        TODO: refactoring
+        """
+        self.wUV = []
+        for uvtri in self.uv[self.uvf]:
+            # no negative areas in UV space - no zbuffer
+            w = area2d(uvtri[0], uvtri[1], uvtri[2])
+            pAB, pCB, pCA = subarea2d(self.pts, uvtri)
+            pts_msk = pts_mask(pAB, pCB, pCA)
+            w1, w2, w3 = barys(pCB[pts_msk], pCA[pts_msk], w)
+            idx = torch.nonzero(pts_mask)
+            self.wUV.append([idx, w1, w2, w3])
+
+    def cull(self, vertices):
+        """back face cull"""
+        mask = backface_cull(vertices[self.f])
+        return vertices[self.f][mask], self.wUV[mask]
+
+    def forward(self, vertices, image):
+        self.render(vertices, image)
+        return self.result
+
+    def raster(self, tri2d, weights):
+        idx, w1, w2, w3 = weights
+        ptsUV = bary_interp(tri2d, w1, w2, w3)
+        rgb = torch.grid_sampler_2d(
+            self.uvmap[None, ...], ptsUV[None, None, ...], 0, 0)[0, :, 0, :]
+        # fill buffers
+        self.result[:3, idx] = rgb
+        self.result[3, idx] = 1.0
+
+    def render(self, vertices, image):
+        self.uvmap = image
+        self.result = torch.zeros(
+            [4, self.size, self.size], dtype=DTYPE, device=DEVICE)
+        tris, uvws = backface_cull(vertices[self.f])
+        for tri, uvw in zip(tris, uvws):
+            self.raster(tri, uvw)
