@@ -24,7 +24,7 @@ def subarea2d(pts, tri2d):
     return pAB, pCB, pCA
 
 
-def pts_mask(pAB, pCB, pCA):
+def points_mask(pAB, pCB, pCA):
     """Return a mask: 1 if all areas > 0 else 0 """
     return torch.clamp(pAB, min=0) * \
         torch.clamp(pCB, min=0) * \
@@ -140,7 +140,7 @@ class Render(torch.nn.Module):
         pAB, pCB, pCA = subarea2d(self.pts[bb_msk], tri2d)
 
         # mask for pts that are in the triangle,
-        pts_msk = pts_mask(pAB, pCB, pCA)
+        pts_msk = points_mask(pAB, pCB, pCA)
         if pts_msk.sum() == 0:
             return None
         bb_msk[bb_msk] = pts_msk
@@ -197,7 +197,7 @@ class Reverse(Render):
             # no negative areas in UV space - no zbuffer
             w = area2d(uvtri[0], uvtri[1], uvtri[2])
             pAB, pCB, pCA = subarea2d(self.pts, uvtri)
-            pts_msk = pts_mask(pAB, pCB, pCA)
+            pts_msk = points_mask(pAB, pCB, pCA)
             w1, w2, w3 = barys(pCB[pts_msk], pCA[pts_msk], w)
             idx = torch.nonzero(pts_mask)
             self.wUV.append([idx, w1, w2, w3])
