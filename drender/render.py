@@ -102,8 +102,9 @@ class Render(torch.nn.Module):
 
     def cull(self, vertices):
         """back face cull - return tuple of vert triangles and uv triangles"""
-        mask = backface_cull(vertices[self.f])
-        return vertices[self.f][mask], self.uv[self.uvf][mask]
+        tris = vertices[self.f]
+        mask = backface_cull(tris)
+        return tris[mask], self.uv[self.uvf][mask]
 
     def forward(self, vertices):
         self.render(vertices)
@@ -182,13 +183,13 @@ class Reverse(Render):
     rasterisation once, then each call to forward is much faster.
     """
 
-    def __init__(self, size, faces, uv, uvfaces, uvmap):
-        super(Reverse, self).__init__(size, faces, uv, uvfaces, uvmap)
+    def __init__(self, size, faces, uv, uvfaces):
+        super(Reverse, self).__init__(size, faces, uv, uvfaces, None)
         self.uvmap = None
         self.wUV = None
-        self.get_uvpts()
+        self.uv_weights()
 
-    def get_uvpts(self):
+    def uv_weights(self):
         """
         Similar to raster in super.
         TODO: refactoring
@@ -200,13 +201,15 @@ class Reverse(Render):
             pAB, pCB, pCA = subarea2d(self.pts, uvtri)
             pts_msk = points_mask(pAB, pCB, pCA)
             w1, w2, w3 = barys(pCB[pts_msk], pCA[pts_msk], w)
-            idx = torch.nonzero(pts_mask)
+            idx = torch.nonzero(pts_msk)
             self.wUV.append([idx, w1, w2, w3])
 
     def cull(self, vertices):
         """back face cull"""
-        mask = backface_cull(vertices[self.f])
-        return vertices[self.f][mask], self.wUV[mask]
+        tris = vertices[self.f]
+        mask = backface_cull(tris)
+        idx = torch.nonzero(mask)
+        return tris[mask], [self.wUV[i] for i in idx]
 
     def forward(self, vertices, image):
         self.render(vertices, image)
@@ -217,15 +220,14 @@ class Reverse(Render):
         ptsUV = bary_interp(tri2d, w1, w2, w3)
         rgb = torch.grid_sampler_2d(
             self.uvmap[None, ...], ptsUV[None, None, ...], 0, 0)[0, :, 0, :]
-        # fill buffers
-        self.result[:3, idx] = rgb
-        self.result[3, idx] = 1.0
+        self.result[:3, idx[:, 0], idx[:, 1]] = rgb
+        self.result[3, idx[:, 0], idx[:, 1]] = 1.0
 
     def render(self, vertices, image):
         """Image is a PIL rgb image """
         self.uvmap = image2uvmap(image, self.device)
         self.result = torch.zeros(
             [4, self.size, self.size], dtype=DTYPE, device=DEVICE)
-        tris, uvws = backface_cull(vertices[self.f])
+        tris, uvws = self.cull(vertices)
         for tri, uvw in zip(tris, uvws):
-            self.raster(tri, uvw)
+            self.raster(tri[:, :2], uvw)
