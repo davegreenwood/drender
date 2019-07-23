@@ -123,7 +123,7 @@ class Render(torch.nn.Module):
 
     def raster(self, tri, uv):
         """
-        triangle tri, iff the point is in the triangle.
+        render a triangle tri.
         tri : tensor 3 x 2 (3 points by (x, y))
         """
 
@@ -231,3 +231,65 @@ class Reverse(Render):
         tris, uvws = self.cull(vertices)
         for tri, uvw in zip(tris, uvws):
             self.raster(tri[:, :2], uvw)
+
+
+# -----------------------------------------------------------------------------
+# Normal render - instead of texture lookup rgb is the surface normal
+# -----------------------------------------------------------------------------
+
+class Normal(Render):
+    """Instead of texture lookup rgb is the surface normal"""
+
+    def __init__(self, size, faces, uv, uvfaces):
+        super(Normal, self).__init__(size, faces, uv, uvfaces, None)
+
+    def render(self, vertices):
+        """do render """
+        self.result = torch.zeros(
+            [4, self.size, self.size], dtype=DTYPE, device=DEVICE)
+        self.zbuffer = torch.zeros(
+            [self.size, self.size], dtype=DTYPE, device=DEVICE) + \
+            vertices.min(0)[0][-1]
+        for tri in self.cull(vertices):
+            self.raster(tri)
+
+    def cull(self, vertices):
+        """back face cull"""
+        tris = vertices[self.f]
+        mask = backface_cull(tris)
+        return tris[mask]
+
+    def raster(self, tri):
+        """
+        render a triangle to the rgb value of the face normal.
+        tri : tensor 3 x 2 (3 points by (x, y))
+        """
+        tri2d = tri[:, :2]
+
+        w = area2d(tri2d[0], tri2d[1], tri2d[2])
+        if w < 1e-9:
+            return None
+
+        bb_msk = self.aabbmsk(tri2d)
+        pAB, pCB, pCA = subarea2d(self.pts[bb_msk], tri2d)
+
+        pts_msk = points_mask(pAB, pCB, pCA)
+        if pts_msk.sum() == 0:
+            return None
+        bb_msk[bb_msk] = pts_msk
+
+        w1, w2, w3 = barys(pCB[pts_msk], pCA[pts_msk], w)
+        pts3d = bary_interp(tri, w1, w2, w3)
+        zbf_msk = pts3d[:, 2] >= self.zbuffer[bb_msk]
+        if zbf_msk.sum() == 0:
+            return None
+        bb_msk[bb_msk] = zbf_msk
+
+        rgb = torch.cross(tri[1] - tri[0], tri[2] - tri[0])
+        rgb = rgb - rgb.min()
+        rgb = rgb / rgb.max()
+
+        # fill buffers
+        self.zbuffer[bb_msk] = pts3d[zbf_msk, 2]
+        self.result[:3, bb_msk] = rgb[..., None]
+        self.result[3, bb_msk] = 1.0
