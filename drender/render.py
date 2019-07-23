@@ -286,8 +286,8 @@ class Normal(Render):
         bb_msk[bb_msk] = zbf_msk
 
         rgb = torch.cross(tri[1] - tri[0], tri[2] - tri[0])
-        rgb -= rgb.min()
-        rgb /= rgb.max()
+        rgb = rgb - rgb.min()
+        rgb = rgb / rgb.max()
 
         # fill buffers
         self.zbuffer[bb_msk] = pts3d[zbf_msk, 2]
