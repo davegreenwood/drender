@@ -64,14 +64,14 @@ def numpy_cube():
     """Return numpy unit cube triangles. """
     _, f, uv, uvf = read_obj(RCUBE)
     v = np.array([
-        [-0.5, -0.5, 0.5],
-        [0.5, -0.5, 0.5],
         [-0.5, 0.5, 0.5],
+        [-0.5, -0.5, 0.5],
         [0.5, 0.5, 0.5],
-        [-0.5, 0.5, -0.5],
+        [0.5, -0.5, 0.5],
         [0.5, 0.5, -0.5],
-        [-0.5, -0.5, -0.5],
-        [0.5, -0.5, -0.5]], dtype=np.float32)
+        [0.5, -0.5, -0.5],
+        [-0.5, 0.5, -0.5],
+        [-0.5, -0.5, -0.5]], dtype=np.float32)
     return v, f, uv, uvf
 
 
@@ -129,16 +129,8 @@ class Pcube(Rcube):
 
     def __init__(self):
         super(Pcube, self).__init__()
-        self.v = torch.tensor([
-            [-0.5, -0.5, 0.5],
-            [0.5, -0.5, 0.5],
-            [-0.5, 0.5, 0.5],
-            [0.5, 0.5, 0.5],
-            [-0.5, 0.5, -0.5],
-            [0.5, 0.5, -0.5],
-            [-0.5, -0.5, -0.5],
-            [0.5, -0.5, -0.5],
-        ], dtype=DTYPE, device=DEVICE)
+        v, _, _, _ = numpy_cube()
+        self.v = torch.tensor(v, dtype=DTYPE, device=DEVICE)
         self.tris = self.v[self.f]
         self.rodrigues_fn = Rodrigues.apply
 
