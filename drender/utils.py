@@ -28,6 +28,14 @@ def uvmap(fname=None, device=DEVICE):
     return image2uvmap(image, device)
 
 
+def uvimg(fname=None):
+    """
+    Return the utility uvmap as a PIL Image. If fname is None uvmap will
+    be default, or if fname is a valid image file - use that."""
+    fname = fname or UVMAP
+    return Image.open(fname)
+
+
 def read_obj(fname):
     """Parse an obj file, return ndarray of correct data type."""
     v, vt, f, tf = [], [], [], []
@@ -109,9 +117,11 @@ class Rcube:
         self.device = DEVICE
 
     def get_uvmap(self):
-        """Return the uvmap image as PIL image """
+        """Return the uvmap image as PIL image.
+        Undo the inversion of the map."""
         topil = ToPILImage()
-        return topil(self.uvmap)
+        return topil(self.uvmap).transpose(
+            Image.FLIP_TOP_BOTTOM).convert("RGB")
 
 
 class Pcube(Rcube):
