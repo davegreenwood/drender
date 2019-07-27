@@ -20,8 +20,12 @@ topil = ToPILImage()
 rcube = Rcube()
 rnd = Render(size, rcube.f, rcube.uv, rcube.uvf, rcube.uvmap)
 
+v = rcube.v
+v[:, 2] -= 2
+v[:, :2] /= -v[:, 2, None]
+
 t0 = time.time()
-result = rnd.forward(rcube.v)
+result = rnd.forward(v)
 t1 = time.time()
 print(f"time: {t1-t0:0.2f}")
 
