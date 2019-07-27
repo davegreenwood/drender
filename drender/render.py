@@ -122,7 +122,7 @@ class Render(torch.nn.Module):
             [4, self.size, self.size], dtype=DTYPE, device=DEVICE)
         self.zbuffer = torch.zeros(
             [self.size, self.size], dtype=DTYPE, device=DEVICE) + \
-            vertices.max(0)[0][-1]
+            vertices.min(0)[0][-1]
         tris = self.cull(vertices)
         for tri in tris:
             self.raster(tri)
@@ -160,7 +160,8 @@ class Render(torch.nn.Module):
         pts6d = bary_interp(tri, w1, w2, w3)
 
         # keep points that are nearer than existing zbuffer
-        zbf_msk = pts6d[:, 2] <= self.zbuffer[bb_msk]
+        ptsZ = 1 / pts6d[:, 5]
+        zbf_msk = ptsZ >= self.zbuffer[bb_msk]
         if zbf_msk.sum() == 0:
             return None
 
@@ -172,7 +173,7 @@ class Render(torch.nn.Module):
             ptsUV[None, None, ...], 0, 0)[0, :, 0, :]
 
         # fill buffers
-        self.zbuffer[bb_msk] = pts6d[zbf_msk, 2]
+        self.zbuffer[bb_msk] = ptsZ[zbf_msk]
         self.result[:3, bb_msk] = rgb[:, zbf_msk]
         self.result[3, bb_msk] = 1.0
 
