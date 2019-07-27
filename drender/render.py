@@ -116,7 +116,7 @@ class Render(torch.nn.Module):
             [4, self.size, self.size], dtype=DTYPE, device=DEVICE)
         self.zbuffer = torch.zeros(
             [self.size, self.size], dtype=DTYPE, device=DEVICE) + \
-            vertices.min(0)[0][-1]
+            vertices.max(0)[0][-1]
         tris, uvs = self.cull(vertices)
         for tri, uv in zip(tris, uvs):
             self.raster(tri, uv)
@@ -124,7 +124,7 @@ class Render(torch.nn.Module):
     def raster(self, tri, uv):
         """
         render a triangle tri.
-        tri : tensor 3 x 2 (3 points by (x, y))
+        tri : tensor 3 x 3 (3 points by (x, y, z))
         """
 
         # mostly 2d - assuming the triangle is in view space
@@ -154,14 +154,28 @@ class Render(torch.nn.Module):
         pts3d = bary_interp(tri, w1, w2, w3)
 
         # keep points that are nearer than existing zbuffer
-        zbf_msk = pts3d[:, 2] >= self.zbuffer[bb_msk]
+        zbf_msk = pts3d[:, 2] <= self.zbuffer[bb_msk]
         if zbf_msk.sum() == 0:
             return None
 
         bb_msk[bb_msk] = zbf_msk
 
         # interpolated uvs for rgb
-        ptsUV = bary_interp(uv, w1[zbf_msk], w2[zbf_msk], w3[zbf_msk])
+        # z value of triangle
+        z = tri[:, 2]
+
+        #  uv -> u/z, v/z, 1/z
+        uvz = torch.cat(
+            [uv, torch.ones([3, 1], device=self.device)], dim=1) / z[..., None]
+
+        # interpolate
+        ptsUV = bary_interp(uvz, w1[zbf_msk], w2[zbf_msk], w3[zbf_msk])
+
+        # interpolated z
+        interpz = 1 / ptsUV[:, 2]
+
+        # mult back
+        ptsUV = ptsUV * interpz[..., None]
 
         rgb = torch.grid_sampler_2d(
             self.uvmap[None, ...], ptsUV[None, None, ...], 0, 0)[0, :, 0, :]
@@ -280,7 +294,7 @@ class Normal(Render):
 
         w1, w2, w3 = barys(pCB[pts_msk], pCA[pts_msk], w)
         pts3d = bary_interp(tri, w1, w2, w3)
-        zbf_msk = pts3d[:, 2] >= self.zbuffer[bb_msk]
+        zbf_msk = pts3d[:, 2] <= self.zbuffer[bb_msk]
         if zbf_msk.sum() == 0:
             return None
         bb_msk[bb_msk] = zbf_msk
