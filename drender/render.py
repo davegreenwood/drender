@@ -101,10 +101,16 @@ class Render(torch.nn.Module):
         return msk_min * msk_max
 
     def cull(self, vertices):
-        """back face cull - return tuple of vert triangles and uv triangles"""
-        tris = vertices[self.f]
-        mask = backface_cull(tris)
-        return tris[mask], self.uv[self.uvf][mask]
+        """
+        Back face cull:
+        return tensor N x 3 x 6 (3 points by (x, y, z, u/z, v/z, 1/z))
+        """
+        all_tris = vertices[self.f]
+        mask = backface_cull(all_tris)
+        tris = all_tris[mask]
+        uvs = self.uv[self.uvf][mask] / tris[:, :, 2, None]
+        z_inv = 1 / tris[:, :, 2, None]
+        return torch.cat([tris, uvs, z_inv], dim=2)
 
     def forward(self, vertices):
         self.render(vertices)
@@ -117,14 +123,14 @@ class Render(torch.nn.Module):
         self.zbuffer = torch.zeros(
             [self.size, self.size], dtype=DTYPE, device=DEVICE) + \
             vertices.max(0)[0][-1]
-        tris, uvs = self.cull(vertices)
-        for tri, uv in zip(tris, uvs):
-            self.raster(tri, uv)
+        tris = self.cull(vertices)
+        for tri in tris:
+            self.raster(tri)
 
-    def raster(self, tri, uv):
+    def raster(self, tri):
         """
         render a triangle tri.
-        tri : tensor 3 x 3 (3 points by (x, y, z))
+        tri : tensor 3 x 6 (3 points by (x, y, z, u/z, v/z, 1/z))
         """
 
         # mostly 2d - assuming the triangle is in view space
@@ -150,38 +156,24 @@ class Render(torch.nn.Module):
         # barycentric coordinates
         w1, w2, w3 = barys(pCB[pts_msk], pCA[pts_msk], w)
 
-        # interpolated 3d pixels to consider for render
-        pts3d = bary_interp(tri, w1, w2, w3)
+        # interpolated 6d pixels to consider for render
+        pts6d = bary_interp(tri, w1, w2, w3)
+        pts6d[:, 2:] /= pts6d[:, 5:]
 
         # keep points that are nearer than existing zbuffer
-        zbf_msk = pts3d[:, 2] <= self.zbuffer[bb_msk]
+        zbf_msk = 1 / pts6d[:, 5] >= self.zbuffer[bb_msk]
         if zbf_msk.sum() == 0:
             return None
 
         bb_msk[bb_msk] = zbf_msk
 
         # interpolated uvs for rgb
-        # z value of triangle
-        z = tri[:, 2]
-
-        #  uv -> u/z, v/z, 1/z
-        uvz = torch.cat(
-            [uv, torch.ones([3, 1], device=self.device)], dim=1) / z[..., None]
-
-        # interpolate
-        ptsUV = bary_interp(uvz, w1[zbf_msk], w2[zbf_msk], w3[zbf_msk])
-
-        # interpolated z
-        interpz = 1 / ptsUV[:, 2]
-
-        # mult back
-        ptsUV = ptsUV * interpz[..., None]
-
         rgb = torch.grid_sampler_2d(
-            self.uvmap[None, ...], ptsUV[None, None, ...], 0, 0)[0, :, 0, :]
+            self.uvmap[None, ...],
+            pts6d[None, None, :, 3:5], 0, 0)[0, :, 0, :]
 
         # fill buffers
-        self.zbuffer[bb_msk] = pts3d[zbf_msk, 2]
+        self.zbuffer[bb_msk] = 1/pts6d[zbf_msk, 5]
         self.result[:3, bb_msk] = rgb
         self.result[3, bb_msk] = 1.0
 
