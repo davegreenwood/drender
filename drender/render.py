@@ -109,7 +109,7 @@ class Render(torch.nn.Module):
         mask = backface_cull(all_tris)
         tris = all_tris[mask]
         uvs = self.uv[self.uvf][mask] / tris[:, :, 2, None]
-        z_inv = 1 / tris[:, :, 2, None]
+        z_inv = torch.ones([tris.shape[0], 3, 1]) / tris[:, :, 2, None]
         return torch.cat([tris, uvs, z_inv], dim=2)
 
     def forward(self, vertices):
@@ -158,23 +158,22 @@ class Render(torch.nn.Module):
 
         # interpolated 6d pixels to consider for render
         pts6d = bary_interp(tri, w1, w2, w3)
-        pts6d[:, 2:] /= pts6d[:, 5:]
 
         # keep points that are nearer than existing zbuffer
-        zbf_msk = 1 / pts6d[:, 5] >= self.zbuffer[bb_msk]
+        zbf_msk = pts6d[:, 2] <= self.zbuffer[bb_msk]
         if zbf_msk.sum() == 0:
             return None
 
         bb_msk[bb_msk] = zbf_msk
-
         # interpolated uvs for rgb
+        ptsUV = pts6d[:, 3:5] / pts6d[:, 5:]
         rgb = torch.grid_sampler_2d(
             self.uvmap[None, ...],
-            pts6d[None, None, :, 3:5], 0, 0)[0, :, 0, :]
+            ptsUV[None, None, ...], 0, 0)[0, :, 0, :]
 
         # fill buffers
-        self.zbuffer[bb_msk] = 1/pts6d[zbf_msk, 5]
-        self.result[:3, bb_msk] = rgb
+        self.zbuffer[bb_msk] = pts6d[zbf_msk, 2]
+        self.result[:3, bb_msk] = rgb[:, zbf_msk]
         self.result[3, bb_msk] = 1.0
 
 # -----------------------------------------------------------------------------
