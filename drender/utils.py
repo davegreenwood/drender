@@ -60,10 +60,10 @@ def read_obj(fname):
     return verts, faces, uv, uvfaces
 
 
-def numpy_cube():
+def numpy_cube(scale=1.0):
     """Return numpy unit cube triangles. """
     _, f, uv, uvf = read_obj(RCUBE)
-    v = np.array([
+    v = scale * np.array([
         [-0.5, 0.5, 0.5],
         [-0.5, -0.5, 0.5],
         [0.5, 0.5, 0.5],
@@ -106,9 +106,9 @@ class Rodrigues(torch.autograd.Function):
 class Rcube:
     """test object - a cube with the vertices rotated."""
 
-    def __init__(self):
+    def __init__(self, scale=1.0):
         (v, f, uv, uvf), totensor = read_obj(RCUBE), ToTensor()
-        self.v = torch.from_numpy(v).to(DEVICE)
+        self.v = torch.from_numpy(v * scale).to(DEVICE)
         self.uv = torch.from_numpy(uv).to(DEVICE)
         self.f = torch.from_numpy(f).to(DEVICE)
         self.uvf = torch.from_numpy(uvf).to(DEVICE)
@@ -127,9 +127,9 @@ class Rcube:
 class Pcube(Rcube):
     """A cube with parameters to rotate."""
 
-    def __init__(self):
+    def __init__(self, scale=1.0):
         super(Pcube, self).__init__()
-        v, _, _, _ = numpy_cube()
+        v, _, _, _ = numpy_cube(scale)
         self.v = torch.tensor(v, dtype=DTYPE, device=DEVICE)
         self.tris = self.v[self.f]
         self.rodrigues_fn = Rodrigues.apply
