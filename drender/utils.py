@@ -16,7 +16,7 @@ DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 def image2uvmap(image, device=DEVICE):
     """From a PIL image return a UV map tensor."""
     t = ToTensor()
-    return t(image.convert("RGB").transpose(Image.FLIP_TOP_BOTTOM)).to(device)
+    return t(image.transpose(Image.FLIP_TOP_BOTTOM)).to(device)
 
 
 def uvmap(fname=None, device=DEVICE):

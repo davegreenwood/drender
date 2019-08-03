@@ -174,8 +174,12 @@ class Render(torch.nn.Module):
 
         # fill buffers
         self.zbuffer[bb_msk] = ptsZ[zbf_msk]
-        self.result[:3, bb_msk] = rgb[:, zbf_msk]
-        self.result[3, bb_msk] = 1.0
+        # allow alpha in uv map
+        if self.uvmap.shape[0] == 4:
+            self.result[:, bb_msk] = rgb[:, zbf_msk]
+        else:
+            self.result[:3, bb_msk] = rgb[:3, zbf_msk]
+            self.result[3, bb_msk] = 1.0
 
 # -----------------------------------------------------------------------------
 # Reverse render - project the view to UV space
