@@ -169,7 +169,8 @@ class Render(torch.nn.Module):
     def raster(self, tri):
         """
         render a triangle tri.
-        tri : tensor 3 x 6 (3 points by (x, y, z, u/z, v/z, 1/z))
+        tri : tensor 3 x 9:
+        (3 points by (x, y, z, u/z, v/z, nx/z, ny/z, nz/z, 1/z))
         """
 
         # mostly 2d - assuming the triangle is in view space
@@ -195,22 +196,21 @@ class Render(torch.nn.Module):
         # barycentric coordinates
         w1, w2, w3 = barys(pCB[pts_msk], pCA[pts_msk], w)
 
-        # interpolated 6d pixels to consider for render
-        pts6d = bary_interp(tri, w1, w2, w3)
+        # interpolated 9d pixels to consider for render
+        pts9d = bary_interp(tri, w1, w2, w3)
 
         # keep points that are nearer than existing zbuffer
-        ptsZ = 1 / pts6d[:, -1]
+        ptsZ = 1 / pts9d[:, -1]
         zbf_msk = ptsZ >= self.zbuffer[bb_msk]
         if zbf_msk.sum() == 0:
             return None
 
         bb_msk[bb_msk] = zbf_msk
         # interpolated verts
-        inVerts = pts6d[:, :-1] * ptsZ[..., None]
-        ptsUV = inVerts[:, 3:5]
+        inVerts = pts9d[:, :-1] * ptsZ[..., None]
         rgb = torch.grid_sampler_2d(
             self.uvmap[None, ...],
-            ptsUV[None, None, ...], 0, 0)[0, :, 0, :]
+            inVerts[None, None, :, 3:5], 0, 0)[0, :, 0, :]
 
         # fill buffers
         self.zbuffer[bb_msk] = ptsZ[zbf_msk]
