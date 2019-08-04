@@ -59,7 +59,8 @@ def lookup_table(size, dtype=DTYPE, device=DEVICE):
 
 def face_normals(tris):
     """calculate the face normal of the tris"""
-    return torch.cross(tris[:, 1] - tris[:, 0], tris[:, 2] - tris[:, 0])
+    normals = torch.cross(tris[:, 1] - tris[:, 0], tris[:, 2] - tris[:, 0])
+    return normals / torch.norm(normals, dim=-1).view(-1, 1)
 
 
 def backface_cull(tris):
