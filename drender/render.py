@@ -96,6 +96,7 @@ class Render(torch.nn.Module):
         self.uvmap = uvmap
         self.result = None
         self.zbuffer = None
+        self.nmap = None
         self.dtype = DTYPE
         self.device = DEVICE
 
@@ -106,17 +107,32 @@ class Render(torch.nn.Module):
         msk_min = (self.pts[..., 0] >= xmin) & (self.pts[..., 1] >= ymin)
         return msk_min & msk_max
 
+    def vertex_normals(self, vertices):
+        """Calculate the vertex normals."""
+        fnorms = face_normals(vertices[self.f])
+        vnorms = torch.zeros_like(vertices)
+        vnorms[self.f[:, 0]] += fnorms
+        vnorms[self.f[:, 1]] += fnorms
+        vnorms[self.f[:, 2]] += fnorms
+        # return vnorms / torch.norm(vnorms, dim=1).view(-1, 1)
+        return fnorms
+
+    def normal_map(self):
+        """Reshape and return the normal map."""
+        return self.nmap.permute(2, 0, 1).contiguous().view(
+            3, self.size, self.size)
+
     def cull(self, vertices):
         """
         Back face cull:
         return tensor N x 3 x 6 (3 points by (x, y, z, u/z, v/z, 1/z))
         """
-        all_tris = vertices[self.f]
-        mask = backface_cull(all_tris)
-        tris = all_tris[mask]
-        uvs = self.uv[self.uvf][mask] / tris[:, :, 2, None]
+        tris = vertices[self.f]
         z_inv = torch.ones([tris.shape[0], 3, 1]) / tris[:, :, 2, None]
-        return torch.cat([tris, uvs, z_inv], dim=2)
+        uvs = self.uv[self.uvf] * z_inv
+        vnorms = self.vertex_normals(vertices)[self.f] * z_inv
+        mask = backface_cull(tris)
+        return torch.cat([tris, uvs, vnorms, z_inv], dim=2)[mask]
 
     def forward(self, vertices):
         self.render(vertices)
@@ -126,6 +142,8 @@ class Render(torch.nn.Module):
         """do render """
         self.result = torch.zeros(
             [4, self.size, self.size], dtype=DTYPE, device=DEVICE)
+        self.nmap = torch.zeros(
+            [self.size, self.size, 3], dtype=DTYPE, device=DEVICE)
         self.zbuffer = torch.zeros(
             [self.size, self.size], dtype=DTYPE, device=DEVICE) + \
             vertices.min(0)[0][-1]
@@ -166,20 +184,22 @@ class Render(torch.nn.Module):
         pts6d = bary_interp(tri, w1, w2, w3)
 
         # keep points that are nearer than existing zbuffer
-        ptsZ = 1 / pts6d[:, 5]
+        ptsZ = 1 / pts6d[:, -1]
         zbf_msk = ptsZ >= self.zbuffer[bb_msk]
         if zbf_msk.sum() == 0:
             return None
 
         bb_msk[bb_msk] = zbf_msk
-        # interpolated uvs for rgb
-        ptsUV = pts6d[:, 3:5] / pts6d[:, 5:]
+        # interpolated verts
+        inVerts = pts6d[:, :-1] * ptsZ[..., None]
+        ptsUV = inVerts[:, 3:5]
         rgb = torch.grid_sampler_2d(
             self.uvmap[None, ...],
             ptsUV[None, None, ...], 0, 0)[0, :, 0, :]
 
         # fill buffers
         self.zbuffer[bb_msk] = ptsZ[zbf_msk]
+        self.nmap[bb_msk, :] = inVerts[zbf_msk, 5:8]
         # allow alpha in uv map
         if self.uvmap.shape[0] == 4:
             self.result[:, bb_msk] = rgb[:, zbf_msk]
