@@ -102,9 +102,9 @@ class Render(torch.nn.Module):
     def aabbmsk(self, tri):
         """Convert bounding box of 2d triangle to mask."""
         (xmin, ymin), (xmax, ymax) = tri.min(dim=0)[0], tri.max(dim=0)[0]
-        msk_max = (self.pts[..., 0] <= xmax) * (self.pts[..., 1] <= ymax)
-        msk_min = (self.pts[..., 0] >= xmin) * (self.pts[..., 1] >= ymin)
-        return msk_min * msk_max
+        msk_max = (self.pts[..., 0] <= xmax) & (self.pts[..., 1] <= ymax)
+        msk_min = (self.pts[..., 0] >= xmin) & (self.pts[..., 1] >= ymin)
+        return msk_min & msk_max
 
     def cull(self, vertices):
         """
