@@ -230,8 +230,12 @@ class Reverse(Render):
         ptsUV = bary_interp(tri2d, w1, w2, w3)
         rgb = torch.grid_sampler_2d(
             self.uvmap[None, ...], ptsUV[None, None, ...], 0, 0)[0, :, 0, :]
-        self.result[:3, idx[:, 0], idx[:, 1]] = rgb
-        self.result[3, idx[:, 0], idx[:, 1]] = 1.0
+        # allow alpha in uv map
+        if self.uvmap.shape[0] == 4:
+            self.result[:, idx[:, 0], idx[:, 1]] = rgb[:4, ...]
+        else:
+            self.result[:3, idx[:, 0], idx[:, 1]] = rgb[:3, ...]
+            self.result[3, idx[:, 0], idx[:, 1]] = 1.0
 
     def render(self, vertices, image):
         """Image is a PIL rgb image """
