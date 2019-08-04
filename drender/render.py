@@ -60,7 +60,7 @@ def lookup_table(size, dtype=DTYPE, device=DEVICE):
 def face_normals(tris):
     """calculate the face normal of the tris"""
     normals = torch.cross(tris[:, 1] - tris[:, 0], tris[:, 2] - tris[:, 0])
-    return normals / torch.norm(normals, dim=-1).view(-1, 1)
+    return normals / torch.norm(normals)
 
 
 def backface_cull(tris):
@@ -108,14 +108,15 @@ class Render(torch.nn.Module):
         return msk_min & msk_max
 
     def vertex_normals(self, vertices):
-        """Calculate the vertex normals."""
+        """Calculate the vertex normals.
+        Returns a normal for each vertex, the mean of each face normal."""
         fnorms = face_normals(vertices[self.f])
         vnorms = torch.zeros_like(vertices)
         vnorms[self.f[:, 0]] += fnorms
         vnorms[self.f[:, 1]] += fnorms
         vnorms[self.f[:, 2]] += fnorms
-        # return vnorms / torch.norm(vnorms, dim=1).view(-1, 1)
-        return fnorms
+        vnorms /= torch.norm(vnorms)
+        return vnorms
 
     def normal_map(self):
         """Reshape and return the normal map."""
