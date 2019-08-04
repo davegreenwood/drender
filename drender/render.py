@@ -119,9 +119,23 @@ class Render(torch.nn.Module):
         return vnorms
 
     def normal_map(self):
-        """Reshape and return the normal map."""
-        return self.nmap.permute(2, 0, 1).contiguous().view(
+        """Reshape and return the normal map as an image tensor.
+        The normals values are scaled to fit in the 0-1 range.
+        """
+        mask = self.result[3] > 0
+        nmap = self.nmap
+        nmap[mask] = ((nmap[mask] - nmap[mask].min(0)[0]) /
+                      (nmap[mask].max(0)[0] - nmap[mask].min(0)[0]))
+        return nmap.permute(2, 0, 1).contiguous().view(
             3, self.size, self.size)
+
+    def z_map(self):
+        """Return the z-buffer as an image"""
+        mask = self.result[3] > 0
+        zmap = self.zbuffer - self.zbuffer.min()
+        zmap[mask] = ((zmap[mask] - zmap[mask].min()) /
+                      (zmap[mask].max() - zmap[mask].min()))
+        return zmap[None, ...]
 
     def cull(self, vertices):
         """
