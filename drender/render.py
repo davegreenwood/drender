@@ -269,26 +269,38 @@ class Reverse(Render):
         self.render(vertices, image)
         return self.result
 
-    def raster(self, tri2d, weights):
+    def render(self, vertices, image):
+        """Image is a PIL rgb image """
+        self.uvmap = image2uvmap(image, self.device)
+        self.nmap = torch.zeros(
+            [self.size, self.size, 3], dtype=DTYPE, device=DEVICE)
+        self.zbuffer = torch.zeros(
+            [self.size, self.size], dtype=DTYPE, device=DEVICE) + \
+            vertices.min(0)[0][-1]
+        self.result = torch.zeros(
+            [4, self.size, self.size], dtype=DTYPE, device=DEVICE)
+        tris, uvws = self.cull(vertices)
+        for tri, uvw in zip(tris, uvws):
+            self.raster(tri, uvw)
+
+    def raster(self, tri, weights):
+        """rasterize the triangle."""
         idx, w1, w2, w3 = weights
-        ptsUV = bary_interp(tri2d, w1, w2, w3)
+        pts = bary_interp(tri, w1, w2, w3)
+
         rgb = torch.grid_sampler_2d(
-            self.uvmap[None, ...], ptsUV[None, None, ...], 0, 0)[0, :, 0, :]
+            self.uvmap[None, ...],
+            pts[None, None, :, 0:2], 0, 0)[0, :, 0, :]
+
+        # fill buffers
+        self.zbuffer[idx[:, 0], idx[:, 1]] = pts[:, 2]
+        self.nmap[idx[:, 0], idx[:, 1], :] = pts[:, 3:6]
         # allow alpha in uv map
         if self.uvmap.shape[0] == 4:
             self.result[:, idx[:, 0], idx[:, 1]] = rgb[:4, ...]
         else:
             self.result[:3, idx[:, 0], idx[:, 1]] = rgb[:3, ...]
             self.result[3, idx[:, 0], idx[:, 1]] = 1.0
-
-    def render(self, vertices, image):
-        """Image is a PIL rgb image """
-        self.uvmap = image2uvmap(image, self.device)
-        self.result = torch.zeros(
-            [4, self.size, self.size], dtype=DTYPE, device=DEVICE)
-        tris, uvws = self.cull(vertices)
-        for tri, uvw in zip(tris, uvws):
-            self.raster(tri[:, :2], uvw)
 
 
 # -----------------------------------------------------------------------------
