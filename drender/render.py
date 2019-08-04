@@ -144,8 +144,8 @@ class Render(torch.nn.Module):
         """
         tris = vertices[self.f]
         z_inv = torch.ones([tris.shape[0], 3, 1]) / tris[:, :, 2, None]
-        uvs = self.uv[self.uvf] * z_inv
         vnorms = self.vertex_normals(vertices)[self.f] * z_inv
+        uvs = self.uv[self.uvf] * z_inv
         mask = backface_cull(tris)
         return torch.cat([tris, uvs, vnorms, z_inv], dim=2)[mask]
 
@@ -258,9 +258,12 @@ class Reverse(Render):
     def cull(self, vertices):
         """back face cull"""
         tris = vertices[self.f]
+        # z_inv = torch.ones([tris.shape[0], 3, 1]) / tris[:, :, 2, None]
+        vnorms = self.vertex_normals(vertices)[self.f]
         mask = backface_cull(tris)
         idx = torch.nonzero(mask)
-        return tris[mask], [self.wUV[i] for i in idx]
+        return torch.cat([tris, vnorms], dim=2)[mask], \
+            [self.wUV[i] for i in idx]
 
     def forward(self, vertices, image):
         self.render(vertices, image)
