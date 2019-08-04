@@ -57,12 +57,17 @@ def lookup_table(size, dtype=DTYPE, device=DEVICE):
     return torch.rot90(t, 1)
 
 
+def face_normals(tris):
+    """calculate the face normal of the tris"""
+    return torch.cross(tris[:, 1] - tris[:, 0], tris[:, 2] - tris[:, 0])
+
+
 def backface_cull(tris):
     """
     Return a mask for the triangles that face forward. Tris are assumed to be
     in view space."""
     dtype, device = tris.dtype, tris.device
-    normals = torch.cross(tris[:, 1] - tris[:, 0], tris[:, 2] - tris[:, 0])
+    normals = face_normals(tris)
     m = normals @ torch.tensor([0, 0, 1.0], dtype=dtype, device=device)
     return m > 0
 
