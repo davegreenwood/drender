@@ -257,11 +257,11 @@ class Reverse(Render):
     def cull(self, vertices):
         """back face cull"""
         tris = vertices[self.f]
-        # z_inv = torch.ones([tris.shape[0], 3, 1]) / tris[:, :, 2, None]
+        z = tris[:, :, 2, None]
         vnorms = self.vertex_normals(vertices)[self.f]
         mask = backface_cull(tris)
         idx = torch.nonzero(mask)
-        return torch.cat([tris, vnorms], dim=2)[mask], \
+        return torch.cat([tris * z, vnorms * z, z], dim=2)[mask], \
             [self.wUV[i] for i in idx]
 
     def forward(self, vertices, image):
@@ -286,14 +286,20 @@ class Reverse(Render):
         """rasterize the triangle."""
         idx, w1, w2, w3 = weights
         pts = bary_interp(tri, w1, w2, w3)
+        ptsZ = 1 / pts[:, -1:]
+
+        # interpolated verts
+        inVerts = pts[:, :-1] * ptsZ
 
         rgb = torch.grid_sampler_2d(
             self.uvmap[None, ...],
-            pts[None, None, :, 0:2], 0, 0)[0, :, 0, :]
+            inVerts[None, None, :, 0:2],
+            0, 0)[0, :, 0, :]
 
         # fill buffers
-        self.zbuffer[idx[:, 0], idx[:, 1]] = pts[:, 2]
-        self.nmap[idx[:, 0], idx[:, 1], :] = pts[:, 3:6]
+        self.zbuffer[idx[:, 0], idx[:, 1]] = ptsZ[..., 0]
+        self.nmap[idx[:, 0], idx[:, 1], :] = inVerts[:, 3:6]
+
         # allow alpha in uv map
         if self.uvmap.shape[0] == 4:
             self.result[:, idx[:, 0], idx[:, 1]] = rgb[:4, ...]
