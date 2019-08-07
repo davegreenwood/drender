@@ -256,7 +256,7 @@ class Reverse(Render):
     def cull(self, vertices):
         """back face cull"""
         tris = vertices[self.f]
-        z = tris[:, :, 2, None]
+        z = - tris[:, :, 2, None]
         vnorms = self.vertex_normals(vertices)[self.f]
         mask = backface_cull(tris)
         idx = torch.nonzero(mask)
