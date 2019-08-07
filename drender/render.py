@@ -60,7 +60,7 @@ def lookup_table(size, dtype=DTYPE, device=DEVICE):
 def face_normals(tris):
     """calculate the face normal of the tris"""
     normals = torch.cross(tris[:, 1] - tris[:, 0], tris[:, 2] - tris[:, 0])
-    return normals / torch.norm(normals, dim=-1).view(-1, 1)
+    return normals / torch.norm(normals)
 
 
 def backface_cull(tris):
@@ -96,6 +96,7 @@ class Render(torch.nn.Module):
         self.uvmap = uvmap
         self.result = None
         self.zbuffer = None
+        self.nmap = None
         self.dtype = DTYPE
         self.device = DEVICE
 
@@ -106,17 +107,46 @@ class Render(torch.nn.Module):
         msk_min = (self.pts[..., 0] >= xmin) & (self.pts[..., 1] >= ymin)
         return msk_min & msk_max
 
+    def vertex_normals(self, vertices):
+        """Calculate the vertex normals.
+        Returns a normal for each vertex, the mean of each face normal."""
+        fnorms = face_normals(vertices[self.f])
+        vnorms = torch.zeros_like(vertices)
+        vnorms[self.f[:, 0]] += fnorms
+        vnorms[self.f[:, 1]] += fnorms
+        vnorms[self.f[:, 2]] += fnorms
+        vnorms /= torch.norm(vnorms)
+        return vnorms
+
+    def normal_map(self):
+        """
+        Reshape and return the normal map as an image tensor.
+        The normal values are scaled to fit in the 0-1 range.
+        """
+        nmap = self.nmap / torch.norm(self.nmap, dim=2, keepdim=True)
+        nmap = nmap * 0.5 + 0.5
+        return nmap.permute(2, 0, 1).contiguous().view(
+            3, self.size, self.size)
+
+    def z_map(self):
+        """Return the z-buffer as an image"""
+        mask = self.result[3] > 0
+        zmap = self.zbuffer - self.zbuffer.min()
+        zmap[mask] = ((zmap[mask] - zmap[mask].min()) /
+                      (zmap[mask].max() - zmap[mask].min()))
+        return zmap[None, ...]
+
     def cull(self, vertices):
         """
         Back face cull:
         return tensor N x 3 x 6 (3 points by (x, y, z, u/z, v/z, 1/z))
         """
-        all_tris = vertices[self.f]
-        mask = backface_cull(all_tris)
-        tris = all_tris[mask]
-        uvs = self.uv[self.uvf][mask] / tris[:, :, 2, None]
+        tris = vertices[self.f]
         z_inv = torch.ones([tris.shape[0], 3, 1]) / tris[:, :, 2, None]
-        return torch.cat([tris, uvs, z_inv], dim=2)
+        vnorms = self.vertex_normals(vertices)[self.f] * z_inv
+        uvs = self.uv[self.uvf] * z_inv
+        mask = backface_cull(tris)
+        return torch.cat([tris, uvs, vnorms, z_inv], dim=2)[mask]
 
     def forward(self, vertices):
         self.render(vertices)
@@ -126,6 +156,8 @@ class Render(torch.nn.Module):
         """do render """
         self.result = torch.zeros(
             [4, self.size, self.size], dtype=DTYPE, device=DEVICE)
+        self.nmap = torch.zeros(
+            [self.size, self.size, 3], dtype=DTYPE, device=DEVICE)
         self.zbuffer = torch.zeros(
             [self.size, self.size], dtype=DTYPE, device=DEVICE) + \
             vertices.min(0)[0][-1]
@@ -136,7 +168,8 @@ class Render(torch.nn.Module):
     def raster(self, tri):
         """
         render a triangle tri.
-        tri : tensor 3 x 6 (3 points by (x, y, z, u/z, v/z, 1/z))
+        tri : tensor 3 x 9:
+        (3 points by (x, y, z, u/z, v/z, nx/z, ny/z, nz/z, 1/z))
         """
 
         # mostly 2d - assuming the triangle is in view space
@@ -162,24 +195,25 @@ class Render(torch.nn.Module):
         # barycentric coordinates
         w1, w2, w3 = barys(pCB[pts_msk], pCA[pts_msk], w)
 
-        # interpolated 6d pixels to consider for render
-        pts6d = bary_interp(tri, w1, w2, w3)
+        # interpolated 9d pixels to consider for render
+        pts9d = bary_interp(tri, w1, w2, w3)
 
         # keep points that are nearer than existing zbuffer
-        ptsZ = 1 / pts6d[:, 5]
+        ptsZ = 1 / pts9d[:, -1]
         zbf_msk = ptsZ >= self.zbuffer[bb_msk]
         if zbf_msk.sum() == 0:
             return None
 
         bb_msk[bb_msk] = zbf_msk
-        # interpolated uvs for rgb
-        ptsUV = pts6d[:, 3:5] / pts6d[:, 5:]
+        # interpolated verts
+        inVerts = pts9d[:, :-1] * ptsZ[..., None]
         rgb = torch.grid_sampler_2d(
             self.uvmap[None, ...],
-            ptsUV[None, None, ...], 0, 0)[0, :, 0, :]
+            inVerts[None, None, :, 3:5], 0, 0)[0, :, 0, :]
 
         # fill buffers
         self.zbuffer[bb_msk] = ptsZ[zbf_msk]
+        self.nmap[bb_msk, :] = inVerts[zbf_msk, 5:8]
         # allow alpha in uv map
         if self.uvmap.shape[0] == 4:
             self.result[:, bb_msk] = rgb[:, zbf_msk]
@@ -223,34 +257,55 @@ class Reverse(Render):
     def cull(self, vertices):
         """back face cull"""
         tris = vertices[self.f]
+        z = tris[:, :, 2, None]
+        vnorms = self.vertex_normals(vertices)[self.f]
         mask = backface_cull(tris)
         idx = torch.nonzero(mask)
-        return tris[mask], [self.wUV[i] for i in idx]
+        return torch.cat([tris * z, vnorms * z, z], dim=2)[mask], \
+            [self.wUV[i] for i in idx]
 
     def forward(self, vertices, image):
         self.render(vertices, image)
         return self.result
 
-    def raster(self, tri2d, weights):
+    def render(self, vertices, image):
+        """Image is a PIL rgb image """
+        self.uvmap = image2uvmap(image, self.device)
+        self.nmap = torch.zeros(
+            [self.size, self.size, 3], dtype=DTYPE, device=DEVICE)
+        self.zbuffer = torch.zeros(
+            [self.size, self.size], dtype=DTYPE, device=DEVICE) + \
+            vertices.min(0)[0][-1]
+        self.result = torch.zeros(
+            [4, self.size, self.size], dtype=DTYPE, device=DEVICE)
+        tris, uvws = self.cull(vertices)
+        for tri, uvw in zip(tris, uvws):
+            self.raster(tri, uvw)
+
+    def raster(self, tri, weights):
+        """rasterize the triangle."""
         idx, w1, w2, w3 = weights
-        ptsUV = bary_interp(tri2d, w1, w2, w3)
+        pts = bary_interp(tri, w1, w2, w3)
+        ptsZ = 1 / pts[:, -1:]
+
+        # interpolated verts
+        inVerts = pts[:, :-1] * ptsZ
+
         rgb = torch.grid_sampler_2d(
-            self.uvmap[None, ...], ptsUV[None, None, ...], 0, 0)[0, :, 0, :]
+            self.uvmap[None, ...],
+            inVerts[None, None, :, 0:2],
+            0, 0)[0, :, 0, :]
+
+        # fill buffers
+        self.zbuffer[idx[:, 0], idx[:, 1]] = ptsZ[..., 0]
+        self.nmap[idx[:, 0], idx[:, 1], :] = inVerts[:, 3:6]
+
         # allow alpha in uv map
         if self.uvmap.shape[0] == 4:
             self.result[:, idx[:, 0], idx[:, 1]] = rgb[:4, ...]
         else:
             self.result[:3, idx[:, 0], idx[:, 1]] = rgb[:3, ...]
             self.result[3, idx[:, 0], idx[:, 1]] = 1.0
-
-    def render(self, vertices, image):
-        """Image is a PIL rgb image """
-        self.uvmap = image2uvmap(image, self.device)
-        self.result = torch.zeros(
-            [4, self.size, self.size], dtype=DTYPE, device=DEVICE)
-        tris, uvws = self.cull(vertices)
-        for tri, uvw in zip(tris, uvws):
-            self.raster(tri[:, :2], uvw)
 
 
 # -----------------------------------------------------------------------------
