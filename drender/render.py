@@ -119,13 +119,12 @@ class Render(torch.nn.Module):
         return vnorms
 
     def normal_map(self):
-        """Reshape and return the normal map as an image tensor.
-        The normals values are scaled to fit in the 0-1 range.
         """
-        mask = self.result[3] > 0
-        nmap = self.nmap
-        nmap[mask] = ((nmap[mask] - nmap[mask].min(0)[0]) /
-                      (nmap[mask].max(0)[0] - nmap[mask].min(0)[0]))
+        Reshape and return the normal map as an image tensor.
+        The normal values are scaled to fit in the 0-1 range.
+        """
+        nmap = self.nmap / torch.norm(self.nmap, dim=2, keepdim=True)
+        nmap = nmap * 0.5 + 0.5
         return nmap.permute(2, 0, 1).contiguous().view(
             3, self.size, self.size)
 
