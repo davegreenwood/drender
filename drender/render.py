@@ -112,11 +112,10 @@ class Render(torch.nn.Module):
         Returns a normal for each vertex, the mean of each face normal."""
         fnorms = face_normals(vertices[self.f])
         vnorms = torch.zeros_like(vertices)
-        vnorms[self.f[:, 0]] += fnorms
-        vnorms[self.f[:, 1]] += fnorms
-        vnorms[self.f[:, 2]] += fnorms
-        vnorms /= torch.norm(vnorms)
-        return vnorms
+        vnorms.data[self.f[:, 0]] += fnorms
+        vnorms.data[self.f[:, 1]] += fnorms
+        vnorms.data[self.f[:, 2]] += fnorms
+        return vnorms / torch.norm(vnorms)
 
     def normal_map(self):
         """
