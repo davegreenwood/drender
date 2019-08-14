@@ -86,19 +86,21 @@ class Render(torch.nn.Module):
         change during rendering, which are passed to the forward function.
     """
 
-    def __init__(self, size, faces, uv, uvfaces, uvmap):
+    def __init__(self, size, faces, uv, uvfaces, uvmap,
+                 dtype=DTYPE,
+                 device=DEVICE):
         super(Render, self).__init__()
-        self.uv = uv.to(dtype=DTYPE, device=DEVICE) * 2.0 - 1.0
-        self.f = faces.to(dtype=torch.int64, device=DEVICE)
-        self.uvf = uvfaces.to(dtype=torch.int64, device=DEVICE)
-        self.pts = lookup_table(size, dtype=DTYPE, device=DEVICE)
+        self.uv = uv.to(dtype=dtype, device=device) * 2.0 - 1.0
+        self.f = faces.to(dtype=torch.int64, device=device)
+        self.uvf = uvfaces.to(dtype=torch.int64, device=device)
+        self.pts = lookup_table(size, dtype=dtype, device=device)
         self.size = size
         self.uvmap = uvmap
         self.result = None
         self.zbuffer = None
         self.nmap = None
-        self.dtype = DTYPE
-        self.device = DEVICE
+        self.dtype = dtype
+        self.device = device
 
     def aabbmsk(self, tri):
         """Convert bounding box of 2d triangle to mask."""
@@ -154,11 +156,11 @@ class Render(torch.nn.Module):
     def render(self, vertices):
         """do render """
         self.result = torch.zeros(
-            [4, self.size, self.size], dtype=DTYPE, device=DEVICE)
+            [4, self.size, self.size], dtype=self.dtype, device=self.device)
         self.nmap = torch.zeros(
-            [self.size, self.size, 3], dtype=DTYPE, device=DEVICE)
+            [self.size, self.size, 3], dtype=self.dtype, device=self.device)
         self.zbuffer = torch.zeros(
-            [self.size, self.size], dtype=DTYPE, device=DEVICE) + \
+            [self.size, self.size], dtype=self.dtype, device=self.device) + \
             vertices.min(0)[0][-1]
         tris = self.cull(vertices)
         for tri in tris:
@@ -232,8 +234,9 @@ class Reverse(Render):
     rasterisation once, then each call to forward is much faster.
     """
 
-    def __init__(self, size, faces, uv, uvfaces):
-        super(Reverse, self).__init__(size, faces, uv, uvfaces, None)
+    def __init__(self, size, faces, uv, uvfaces, dtype=DTYPE, device=DEVICE):
+        super(Reverse, self).__init__(
+            size, faces, uv, uvfaces, uvmap=None, dtype=dtype, device=device)
         self.uvmap = None
         self.wUV = None
         self.uv_weights()
@@ -271,12 +274,12 @@ class Reverse(Render):
         """Image is a PIL rgb image """
         self.uvmap = image2uvmap(image, self.device)
         self.nmap = torch.zeros(
-            [self.size, self.size, 3], dtype=DTYPE, device=DEVICE)
+            [self.size, self.size, 3], dtype=self.dtype, device=self.device)
         self.zbuffer = torch.zeros(
-            [self.size, self.size], dtype=DTYPE, device=DEVICE) + \
+            [self.size, self.size], dtype=self.dtype, device=self.device) + \
             vertices.min(0)[0][-1]
         self.result = torch.zeros(
-            [4, self.size, self.size], dtype=DTYPE, device=DEVICE)
+            [4, self.size, self.size], dtype=self.dtype, device=self.device)
         tris, uvws = self.cull(vertices)
         for tri, uvw in zip(tris, uvws):
             self.raster(tri, uvw)
