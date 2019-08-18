@@ -1,5 +1,6 @@
 """Render an object"""
 import torch
+from PIL import Image
 from .utils import image2uvmap
 
 DTYPE = torch.float
@@ -271,15 +272,22 @@ class Reverse(Render):
         return self.result
 
     def render(self, vertices, image):
-        """Image is a PIL rgb image """
-        self.uvmap = image2uvmap(image, self.device)
+        """
+        If image is a PIL rgb image convert, or if tensor, pass directly.
+        The resulting image must be channels * height * width.
+        """
+        if isinstance(image, Image.Image):
+            self.uvmap = image2uvmap(image, self.device)
+        else:
+            self.uvmap = image
         self.nmap = torch.zeros(
             [self.size, self.size, 3], dtype=self.dtype, device=self.device)
         self.zbuffer = torch.zeros(
             [self.size, self.size], dtype=self.dtype, device=self.device) + \
             vertices.min(0)[0][-1]
+        c, h, w = self.uvmap.shape[0] + 1, self.size, self.size
         self.result = torch.zeros(
-            [4, self.size, self.size], dtype=self.dtype, device=self.device)
+            [c, h, w], dtype=self.dtype, device=self.device)
         tris, uvws = self.cull(vertices)
         for tri, uvw in zip(tris, uvws):
             self.raster(tri, uvw)
@@ -293,7 +301,7 @@ class Reverse(Render):
         # interpolated verts
         inVerts = pts[:, :-1] * ptsZ
 
-        rgb = torch.grid_sampler_2d(
+        result = torch.grid_sampler_2d(
             self.uvmap[None, ...],
             inVerts[None, None, :, 0:2],
             0, 0)[0, :, 0, :]
@@ -301,10 +309,5 @@ class Reverse(Render):
         # fill buffers
         self.zbuffer[idx[:, 0], idx[:, 1]] = ptsZ[..., 0]
         self.nmap[idx[:, 0], idx[:, 1], :] = inVerts[:, 3:6]
-
-        # allow alpha in uv map
-        if self.uvmap.shape[0] == 4:
-            self.result[:, idx[:, 0], idx[:, 1]] = rgb[:4, ...]
-        else:
-            self.result[:3, idx[:, 0], idx[:, 1]] = rgb[:3, ...]
-            self.result[3, idx[:, 0], idx[:, 1]] = 1.0
+        self.result[:-1, idx[:, 0], idx[:, 1]] = result
+        self.result[-1, idx[:, 0], idx[:, 1]] = 1.0
