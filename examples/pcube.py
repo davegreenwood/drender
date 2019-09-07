@@ -11,6 +11,7 @@ DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 # TESTING
 # -----------------------------------------------------------------------------
 
+
 def project(v):
     """Simple projection"""
     v = v - torch.tensor([0, 0, 2], dtype=DTYPE, device=DEVICE)

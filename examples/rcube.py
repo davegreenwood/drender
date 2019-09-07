@@ -3,7 +3,8 @@ import torch
 from torchvision.transforms import ToPILImage
 from drender.utils import Rcube
 from drender.render import Render
-
+from PIL import Image
+import numpy as np
 
 DTYPE = torch.float
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -32,3 +33,9 @@ print(f"time: {t1-t0:0.2f}")
 # image out
 img = topil(result.cpu())
 img.convert("RGB").save("rcube.jpg")
+
+nmap = topil(rnd.normal_map())
+nmap.convert("RGB").save("rnmap.jpg")
+
+zmap = topil(rnd.z_map())
+zmap.convert("RGB").save("rzmap.jpg")
