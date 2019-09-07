@@ -1,10 +1,17 @@
 """Render an object"""
 import torch
+from torchvision.transforms import ToTensor
 from PIL import Image
-from .utils import image2uvmap
+
 
 DTYPE = torch.float
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+
+def image2uvmap(image, device=DEVICE):
+    """From a PIL image return a UV map tensor."""
+    t = ToTensor()
+    return t(image.transpose(Image.FLIP_TOP_BOTTOM)).to(device)
 
 
 def area2d(a, b, c):
