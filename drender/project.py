@@ -69,9 +69,9 @@ class Project(torch.nn.Module):
     def cull(self, vertices):
         tris = vertices[self.f]
         mask = backface_cull(tris)
-        z = tris[:, :, 2, None]
-        uvs = self.uv[self.uvf]
-        return torch.cat([tris, uvs, z], dim=2)[mask]
+        z_inv = 1.0 / tris[:, :, 2, None]
+        uvs = self.uv[self.uvf] * z_inv
+        return torch.cat([tris, uvs, z_inv], dim=2)[mask]
 
     def project(self, vertices, points):
         tris = self.cull(vertices)
@@ -79,14 +79,12 @@ class Project(torch.nn.Module):
         for p in self.pt_size(points):
             uvpt = torch.tensor([0.0, 0.0, -float("Inf")], device=self.device)
             for tri in tris:
-
                 ptnd = test_point(p, tri)
                 if ptnd is None:
                     continue
                 ptz = 1 / ptnd[None, -1]
-                uv = torch.cat([ptnd[3:5], ptz], dim=0)
+                uv = torch.cat([ptnd[3:5] * ptz, ptz], dim=0)
                 if uv[-1] > uvpt[-1]:
-
                     uvpt = uv
             self.result.append(uvpt)
 
