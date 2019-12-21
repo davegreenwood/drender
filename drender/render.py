@@ -207,7 +207,8 @@ class Render(torch.nn.Module):
         inVerts = pts9d[:, :-1] * ptsZ[..., None]
         rgb = torch.grid_sampler_2d(
             self.uvmap[None, ...],
-            inVerts[None, None, :, 3:5], 0, 0)[0, :, 0, :]
+            inVerts[None, None, :, 3:5],
+            0, 0, align_corners=False)[0, :, 0, :]
 
         # fill buffers
         self.zbuffer[bb_msk] = ptsZ[zbf_msk]
@@ -300,7 +301,7 @@ class Reverse(Render):
         result = torch.grid_sampler_2d(
             self.uvmap[None, ...],
             inVerts[None, None, :, 0:2],
-            0, 0)[0, :, 0, :]
+            0, 0, align_corners=False)[0, :, 0, :]
 
         # fill buffers
         self.zbuffer[idx[:, 0], idx[:, 1]] = ptsZ[..., 0]
