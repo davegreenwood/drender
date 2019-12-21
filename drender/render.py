@@ -277,14 +277,11 @@ class Reverse(Render):
             self.uvmap = image2uvmap(image, self.device)
         else:
             self.uvmap = image
-        self.nmap = torch.zeros(
-            [self.size, self.size, 3], dtype=self.dtype, device=self.device)
-        self.zbuffer = torch.zeros(
-            [self.size, self.size], dtype=self.dtype, device=self.device) + \
-            vertices.min(0)[0][-1]
+        zmin = vertices.min(0)[0][-1]
         c, h, w = self.uvmap.shape[0] + 1, self.size, self.size
-        self.result = torch.zeros(
-            [c, h, w], dtype=self.dtype, device=self.device)
+        self.nmap = torch.zeros([h, w, 3], device=self.device)
+        self.zbuffer = torch.zeros([h, w], device=self.device) + zmin
+        self.result = torch.zeros([c, h, w], device=self.device)
         tris, uvws = self.cull(vertices)
         for tri, uvw in zip(tris, uvws):
             self.raster(tri, uvw)
