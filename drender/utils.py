@@ -10,7 +10,7 @@ from PIL import Image
 RCUBE = resource_filename(__name__, "data/rcube.obj")
 UVMAP = resource_filename(__name__, "data/util-mark6.png")
 DTYPE = torch.float
-DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+DEVICE = torch.device("cpu")
 
 
 def image2uvmap(image, device=DEVICE):
@@ -106,15 +106,15 @@ class Rodrigues(torch.autograd.Function):
 class Rcube:
     """test object - a cube with the vertices rotated."""
 
-    def __init__(self, scale=1.0):
+    def __init__(self, scale=1.0, device=DEVICE):
         (v, f, uv, uvf), totensor = read_obj(RCUBE), ToTensor()
-        self.v = torch.from_numpy(v * scale).to(DEVICE)
-        self.uv = torch.from_numpy(uv).to(DEVICE)
-        self.f = torch.from_numpy(f).to(DEVICE)
-        self.uvf = torch.from_numpy(uvf).to(DEVICE)
+        self.v = torch.from_numpy(v * scale).to(device)
+        self.uv = torch.from_numpy(uv).to(device)
+        self.f = torch.from_numpy(f).to(device)
+        self.uvf = torch.from_numpy(uvf).to(device)
         self.uvmap = totensor(Image.open(UVMAP).transpose(
-            Image.FLIP_TOP_BOTTOM).convert("RGB")).to(DEVICE)
-        self.device = DEVICE
+            Image.FLIP_TOP_BOTTOM).convert("RGB")).to(device)
+        self.device = device
 
     def get_uvmap(self):
         """Return the uvmap image as PIL image.
@@ -127,10 +127,10 @@ class Rcube:
 class Pcube(Rcube):
     """A cube with parameters to rotate."""
 
-    def __init__(self, scale=1.0):
-        super(Pcube, self).__init__()
+    def __init__(self, scale=1.0, device=DEVICE):
+        super(Pcube, self).__init__(scale, device)
         v, _, _, _ = numpy_cube(scale)
-        self.v = torch.tensor(v, dtype=DTYPE, device=DEVICE)
+        self.v = torch.tensor(v, device=device)
         self.tris = self.v[self.f]
         self.rodrigues_fn = Rodrigues.apply
 
