@@ -3,15 +3,7 @@ import torch
 from torchvision.transforms import ToTensor
 from PIL import Image
 
-
-DTYPE = torch.float
-DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
-
-def image2uvmap(image, device=DEVICE):
-    """From a PIL image return a UV map tensor."""
-    t = ToTensor()
-    return t(image.transpose(Image.FLIP_TOP_BOTTOM)).to(device)
+from .utils import DEVICE, image2uvmap
 
 
 def area2d(a, b, c):
