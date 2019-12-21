@@ -4,8 +4,11 @@ from drender.utils import Pcube
 from drender.render import Render
 import matplotlib.pyplot as plt
 
-DTYPE = torch.float
+
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+print(DEVICE)
+# torch.autograd.set_detect_anomaly(True)
+
 
 # -----------------------------------------------------------------------------
 # TESTING
@@ -14,12 +17,10 @@ DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 def project(v):
     """Simple projection"""
-    v = v - torch.tensor([0, 0, 2], dtype=DTYPE, device=DEVICE)
+    v = v - torch.tensor([0.0, 0.0, 2.0], device=DEVICE)
     v = torch.cat([v[:, :2] / -v[:, 2, None], v[:, 2, None]], dim=1)
     return v * 2
 
-print(DEVICE)
-# torch.autograd.set_detect_anomaly(True)
 
 size = 256
 pcube = Pcube()
