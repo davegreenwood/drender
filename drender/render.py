@@ -48,11 +48,11 @@ def bary_interp(tri, w1, w2, w3):
     return w1[..., None] * v1 + w2[..., None] * v2 + w3[..., None] * v3
 
 
-def lookup_table(size, dtype=DTYPE, device=DEVICE):
+def lookup_table(size, device=DEVICE):
     """return a square table (size x size), of 2d points (x, y) in -1, 1"""
     xx, yy = torch.meshgrid(
-        [torch.linspace(-1.0, 1.0, size, dtype=dtype, device=device),
-         torch.linspace(-1.0, 1.0, size, dtype=dtype, device=device)])
+        [torch.linspace(-1.0, 1.0, size, device=device),
+         torch.linspace(-1.0, 1.0, size, device=device)])
     t = torch.stack([xx, yy], dim=-1)
     return torch.rot90(t, 1)
 
@@ -86,20 +86,17 @@ class Render(torch.nn.Module):
         change during rendering, which are passed to the forward function.
     """
 
-    def __init__(self, size, faces, uv, uvfaces, uvmap,
-                 dtype=DTYPE,
-                 device=DEVICE):
+    def __init__(self, size, faces, uv, uvfaces, uvmap, device=DEVICE):
         super(Render, self).__init__()
-        self.uv = uv.to(dtype=dtype, device=device) * 2.0 - 1.0
+        self.uv = uv.to(device=device) * 2.0 - 1.0
         self.f = faces.to(dtype=torch.int64, device=device)
         self.uvf = uvfaces.to(dtype=torch.int64, device=device)
-        self.pts = lookup_table(size, dtype=dtype, device=device)
+        self.pts = lookup_table(size, device=device)
         self.size = size
         self.uvmap = uvmap
         self.result = None
         self.zbuffer = None
         self.nmap = None
-        self.dtype = dtype
         self.device = device
 
     def aabbmsk(self, tri):
@@ -156,11 +153,11 @@ class Render(torch.nn.Module):
     def render(self, vertices):
         """do render """
         self.result = torch.zeros(
-            [4, self.size, self.size], dtype=self.dtype, device=self.device)
+            [4, self.size, self.size], device=self.device)
         self.nmap = torch.zeros(
-            [self.size, self.size, 3], dtype=self.dtype, device=self.device)
+            [self.size, self.size, 3], device=self.device)
         self.zbuffer = torch.zeros(
-            [self.size, self.size], dtype=self.dtype, device=self.device) + \
+            [self.size, self.size], device=self.device) + \
             vertices.min(0)[0][-1]
         tris = self.cull(vertices)
         for tri in tris:
@@ -234,9 +231,9 @@ class Reverse(Render):
     rasterisation once, then each call to forward is much faster.
     """
 
-    def __init__(self, size, faces, uv, uvfaces, dtype=DTYPE, device=DEVICE):
+    def __init__(self, size, faces, uv, uvfaces, device=DEVICE):
         super(Reverse, self).__init__(
-            size, faces, uv, uvfaces, uvmap=None, dtype=dtype, device=device)
+            size, faces, uv, uvfaces, uvmap=None, device=device)
         self.uvmap = None
         self.wUV = None
         self.uv_weights()
