@@ -4,7 +4,7 @@ from torchvision.transforms import ToPILImage
 from drender.utils import uvmap
 from drender.render import Render
 from dcamera.camera import Pinhole
-from h5flame.model import Flame
+from flame.numpy.model import Flame
 
 DTYPE = torch.float
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
