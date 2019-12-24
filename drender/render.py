@@ -39,13 +39,12 @@ def barys(pCB, pCA, w):
     w1 = pCB / w
     w2 = pCA / w
     w3 = 1.0 - w1 - w2
-    return w1, w2, w3
+    return torch.stack([w1, w2, w3], dim=1)
 
 
-def bary_interp(tri, w1, w2, w3):
+def bary_interp(tri, w):
     """bary centric weights to points in triangle - 2d or 3d"""
-    v1, v2, v3, = tri
-    return w1[..., None] * v1 + w2[..., None] * v2 + w3[..., None] * v3
+    return w @ tri
 
 
 def lookup_table(size, device=DEVICE):
@@ -174,8 +173,8 @@ class Render(torch.nn.Module):
         tri2d = tri[:, :2]
 
         # signed area of tri - free back face cull here
-        w = area2d(tri2d[0], tri2d[1], tri2d[2])
-        if w < 1e-9:
+        A = area2d(tri2d[0], tri2d[1], tri2d[2])
+        if A < 1e-9:
             return None
 
         # index to everything
@@ -191,10 +190,10 @@ class Render(torch.nn.Module):
         bb_msk[bb_msk] = pts_msk
 
         # barycentric coordinates
-        w1, w2, w3 = barys(pCB[pts_msk], pCA[pts_msk], w)
+        W = barys(pCB[pts_msk], pCA[pts_msk], A)
 
         # interpolated 9d pixels to consider for render
-        pts9d = bary_interp(tri, w1, w2, w3)
+        pts9d = bary_interp(tri, W)
 
         # keep points that are nearer than existing zbuffer
         ptsZ = 1 / pts9d[:, -1]
@@ -247,12 +246,12 @@ class Reverse(Render):
         self.wUV = []
         for uvtri in self.uv[self.uvf]:
             # no negative areas in UV space - no zbuffer
-            w = area2d(uvtri[0], uvtri[1], uvtri[2])
+            A = area2d(uvtri[0], uvtri[1], uvtri[2])
             pAB, pCB, pCA = subarea2d(self.pts, uvtri)
             pts_msk = points_mask(pAB, pCB, pCA)
-            w1, w2, w3 = barys(pCB[pts_msk], pCA[pts_msk], w)
+            W = barys(pCB[pts_msk], pCA[pts_msk], A)
             idx = torch.nonzero(pts_msk)
-            self.wUV.append([idx, w1, w2, w3])
+            self.wUV.append([idx, W])
 
     def cull(self, vertices):
         """back face cull"""
@@ -288,8 +287,8 @@ class Reverse(Render):
 
     def raster(self, tri, weights):
         """rasterize the triangle."""
-        idx, w1, w2, w3 = weights
-        pts = bary_interp(tri, w1, w2, w3)
+        idx, W = weights
+        pts = bary_interp(tri, W)
         ptsZ = 1 / pts[:, -1:]
 
         # interpolated verts
