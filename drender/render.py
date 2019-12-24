@@ -284,33 +284,19 @@ class Reverse(Render):
         self.result = torch.zeros([c, h, w], device=self.device)
         tris, uvws, idx = self.cull(vertices)
 
-        zbuf, nrm, pts = [], [], []
-        for tri, uvw in zip(tris, uvws):
-            z, n, p = self.raster(tri, uvw)
-            zbuf.append(z)
-            nrm.append(n)
-            pts.append(p)
-
         idx = torch.cat(idx)
-        zbuf = torch.cat(zbuf)
-        nrm = torch.cat(nrm)
-        pts = torch.cat(pts)
+        pts = torch.cat([bary_interp(t, w) for t, w in zip(tris, uvws)])
+        pts[:, -1:] = 1 / pts[:, -1:]
+        pts[:, :-1] = pts[:, :-1] * pts[:, -1:]
 
+        # lookup in uvmap
         result = torch.grid_sampler_2d(
             self.uvmap[None, ...],
-            pts[None, None, ...],
+            pts[None, None, :, 0:2],
             0, 0, align_corners=False)[0, :, 0, :]
 
         # fill buffers
-        self.zbuffer[idx[:, 0], idx[:, 1]] = zbuf
-        self.nmap[idx[:, 0], idx[:, 1], :] = nrm
+        self.zbuffer[idx[:, 0], idx[:, 1]] = pts[:, -1]
+        self.nmap[idx[:, 0], idx[:, 1], :] = pts[:, 3:6]
         self.result[:-1, idx[:, 0], idx[:, 1]] = result
         self.result[-1, idx[:, 0], idx[:, 1]] = 1.0
-
-    def raster(self, tri, weights):
-        W = weights
-        pts = bary_interp(tri, W)
-        ptsZ = 1 / pts[:, -1:]
-        # interpolated verts
-        inVerts = pts[:, :-1] * ptsZ
-        return ptsZ[..., 0], inVerts[:, 3:6], inVerts[:, 0:2]
