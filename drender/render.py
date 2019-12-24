@@ -244,14 +244,15 @@ class Reverse(Render):
         TODO: refactoring
         """
         self.wUV = []
+        self.idx = []
         for uvtri in self.uv[self.uvf]:
             # no negative areas in UV space - no zbuffer
             A = area2d(uvtri[0], uvtri[1], uvtri[2])
             pAB, pCB, pCA = subarea2d(self.pts, uvtri)
             pts_msk = points_mask(pAB, pCB, pCA)
             W = barys(pCB[pts_msk], pCA[pts_msk], A)
-            idx = torch.nonzero(pts_msk)
-            self.wUV.append([idx, W])
+            self.idx.append(torch.nonzero(pts_msk))
+            self.wUV.append(W)
 
     def cull(self, vertices):
         """back face cull"""
@@ -261,7 +262,7 @@ class Reverse(Render):
         mask = backface_cull(tris)
         idx = torch.nonzero(mask)
         return torch.cat([tris * z, vnorms * z, z], dim=2)[mask], \
-            [self.wUV[i] for i in idx]
+            [self.wUV[i] for i in idx], [self.idx[i] for i in idx]
 
     def forward(self, vertices, image):
         self.render(vertices, image)
@@ -281,26 +282,35 @@ class Reverse(Render):
         self.nmap = torch.zeros([h, w, 3], device=self.device)
         self.zbuffer = torch.zeros([h, w], device=self.device) + zmin
         self.result = torch.zeros([c, h, w], device=self.device)
-        tris, uvws = self.cull(vertices)
+        tris, uvws, idx = self.cull(vertices)
+
+        zbuf, nrm, pts = [], [], []
         for tri, uvw in zip(tris, uvws):
-            self.raster(tri, uvw)
+            z, n, p = self.raster(tri, uvw)
+            zbuf.append(z)
+            nrm.append(n)
+            pts.append(p)
 
-    def raster(self, tri, weights):
-        """rasterize the triangle."""
-        idx, W = weights
-        pts = bary_interp(tri, W)
-        ptsZ = 1 / pts[:, -1:]
-
-        # interpolated verts
-        inVerts = pts[:, :-1] * ptsZ
+        idx = torch.cat(idx)
+        zbuf = torch.cat(zbuf)
+        nrm = torch.cat(nrm)
+        pts = torch.cat(pts)
 
         result = torch.grid_sampler_2d(
             self.uvmap[None, ...],
-            inVerts[None, None, :, 0:2],
+            pts[None, None, ...],
             0, 0, align_corners=False)[0, :, 0, :]
 
         # fill buffers
-        self.zbuffer[idx[:, 0], idx[:, 1]] = ptsZ[..., 0]
-        self.nmap[idx[:, 0], idx[:, 1], :] = inVerts[:, 3:6]
+        self.zbuffer[idx[:, 0], idx[:, 1]] = zbuf
+        self.nmap[idx[:, 0], idx[:, 1], :] = nrm
         self.result[:-1, idx[:, 0], idx[:, 1]] = result
         self.result[-1, idx[:, 0], idx[:, 1]] = 1.0
+
+    def raster(self, tri, weights):
+        W = weights
+        pts = bary_interp(tri, W)
+        ptsZ = 1 / pts[:, -1:]
+        # interpolated verts
+        inVerts = pts[:, :-1] * ptsZ
+        return ptsZ[..., 0], inVerts[:, 3:6], inVerts[:, 0:2]
