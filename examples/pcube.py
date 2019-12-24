@@ -38,8 +38,8 @@ y_img = topil(y)
 r = torch.zeros(3, requires_grad=True)
 
 # fitting
-num_epochs = 120
-lrn_rate = 0.015
+num_epochs = 150
+lrn_rate = 0.05
 loss_func = torch.nn.L1Loss()
 optimiser = torch.optim.Adam([r], lr=lrn_rate)
 
