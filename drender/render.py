@@ -2,7 +2,6 @@
 import torch
 from torchvision.transforms import ToTensor
 from PIL import Image
-
 from .utils import DEVICE, image2uvmap
 
 
@@ -236,6 +235,7 @@ class Reverse(Render):
             size, faces, uv, uvfaces, uvmap=None, device=device)
         self.uvmap = None
         self.wUV = None
+        self.idx = None
         self.uv_weights()
 
     def uv_weights(self):
@@ -277,6 +277,7 @@ class Reverse(Render):
             self.uvmap = image2uvmap(image, self.device)
         else:
             self.uvmap = image
+
         zmin = vertices.min(0)[0][-1]
         c, h, w = self.uvmap.shape[0] + 1, self.size, self.size
         self.nmap = torch.zeros([h, w, 3], device=self.device)
@@ -285,7 +286,7 @@ class Reverse(Render):
         tris, uvws, idx = self.cull(vertices)
 
         idx = torch.cat(idx)
-        pts = torch.cat([bary_interp(t, w) for t, w in zip(tris, uvws)])
+        pts = torch.cat([w @ t for t, w in zip(tris, uvws)])
         pts[:, -1:] = 1 / pts[:, -1:]
         pts[:, :-1] = pts[:, :-1] * pts[:, -1:]
 
