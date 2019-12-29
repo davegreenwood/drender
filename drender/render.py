@@ -245,7 +245,9 @@ class Reverse(Render):
         """
         if use_cache:
             try:
-                self.uvwmap, self.idxmap = read_map_cache(self.size)
+                uvwmap, idxmap = read_map_cache(self.size)
+                self.uvwmap = uvwmap.to(self.device)
+                self.idxmap = idxmap.to(self.device)
                 return
             except IOError as _:
                 print("Reading cache failed, rebuilding...")
