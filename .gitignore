@@ -14,6 +14,7 @@
 !examples/face.py
 !examples/reverse_face.py
 !examples/reverse_cube.py
+!examples/face.png
 
 !drender
 !drender/*.py
