@@ -1,4 +1,6 @@
 """Utility functions to load data."""
+import pickle
+import os
 from pkg_resources import resource_filename
 import numpy as np
 import torch
@@ -11,6 +13,28 @@ RCUBE = resource_filename(__name__, "data/rcube.obj")
 UVMAP = resource_filename(__name__, "data/util-mark6.png")
 DTYPE = torch.float
 DEVICE = torch.device("cpu")
+CACHE = os.path.expanduser("~/.dg/drender/cache/")
+
+
+def write_map_cache(size, weights, index):
+    """Write a UV weight map to disk - using size as the filename."""
+    os.makedirs(CACHE, exist_ok=True)
+    fname = os.path.join(CACHE, f"{int(size)}.pkl")
+    data = dict(weights=weights, index=index)
+    with open(fname, "wb") as fid:
+        pickle.dump(data, fid)
+
+
+def read_map_cache(size):
+    """try to read a cache file."""
+    fname = os.path.join(CACHE, f"{int(size)}.pkl")
+    try:
+        with open(fname, "rb") as fid:
+            data = pickle.load(fid)
+        return data["weights"], data["index"]
+    except IOError:
+        print("Could not read file:", fname)
+        raise
 
 
 def image2uvmap(image, device=DEVICE):

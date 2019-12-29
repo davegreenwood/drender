@@ -2,7 +2,7 @@
 import torch
 from torchvision.transforms import ToTensor
 from PIL import Image
-from .utils import DEVICE, image2uvmap
+from .utils import DEVICE, image2uvmap, write_map_cache, read_map_cache
 
 
 def area2d(a, b, c):
@@ -237,12 +237,19 @@ class Reverse(Render):
         self.uvmap = None
         self.uvwmap = None
         self.idxmap = None
-        self.uv_weights()
+        self.uv_weights(True)
 
-    def uv_weights(self):
+    def uv_weights(self, use_cache=True):
         """
         build maps of weights and triangle indices.
         """
+        if use_cache:
+            try:
+                self.uvwmap, self.idxmap = read_map_cache(self.size)
+                return
+            except IOError as _:
+                print("Reading cache failed, rebuilding...")
+
         self.uvwmap = torch.ones(self.size, self.size, 3, device=self.device)
         self.idxmap = torch.ones(self.size, self.size,
                                  dtype=torch.long, device=self.device) * -1
@@ -255,6 +262,8 @@ class Reverse(Render):
             W = barys(pCB[pts_msk], pCA[pts_msk], A)
             self.uvwmap[pts_msk, :] = W
             self.idxmap[pts_msk] = i
+        # if we built it, save it for reuse
+        write_map_cache(self.size, self.uvwmap, self.idxmap)
 
     def tri_stack(self, vertices, eyepoint=None):
         """backface cull the triangles and return
