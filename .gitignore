@@ -12,6 +12,8 @@
 !examples/pcube.py
 !examples/flame.py
 !examples/face.py
+!examples/reverse_face.py
+!examples/reverse_cube.py
 
 !drender
 !drender/*.py
