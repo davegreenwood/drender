@@ -235,41 +235,46 @@ class Reverse(Render):
         super(Reverse, self).__init__(
             size, faces, uv, uvfaces, uvmap=None, device=device)
         self.uvmap = None
-        self.wUV = None
-        self.idx = None
+        self.uvwmap = None
+        self.idxmap = None
         self.uv_weights()
 
     def uv_weights(self):
         """
-        Similar to raster in super.
-        TODO: refactoring
+        build maps of weights and triangle indices.
         """
-        self.wUV = []
-        self.idx = []
-        for uvtri in self.uv[self.uvf]:
+        self.uvwmap = torch.ones(self.size, self.size, 3, device=self.device)
+        self.idxmap = torch.ones(self.size, self.size,
+                                 dtype=torch.long, device=self.device) * -1
+
+        for i, uvtri in enumerate(self.uv[self.uvf]):
             # no negative areas in UV space - no zbuffer
             A = area2d(uvtri[0], uvtri[1], uvtri[2])
             pAB, pCB, pCA = subarea2d(self.pts, uvtri)
             pts_msk = points_mask(pAB, pCB, pCA)
             W = barys(pCB[pts_msk], pCA[pts_msk], A)
-            self.idx.append(torch.nonzero(pts_msk))
-            self.wUV.append(W)
+            self.uvwmap[pts_msk, :] = W
+            self.idxmap[pts_msk] = i
 
-    def cull(self, vertices):
-        """back face cull"""
+    def tri_stack(self, vertices, eyepoint=None):
+        """backface cull the triangles and return
+        the x, y indices, culled triangles and matching barycentric weights:
+        (x, y, tris, weights)
+        """
         tris = vertices[self.f]
         z = - tris[:, :, 2, None]
         vnorms = self.vertex_normals(vertices)[self.f]
-        mask = backface_cull(tris)
-        idx = torch.nonzero(mask)
-        return torch.cat([tris * z, vnorms * z, z], dim=2)[mask], \
-            [self.wUV[i] for i in idx], [self.idx[i] for i in idx]
+        cull = torch.nonzero(backface_cull(tris, eyepoint)).squeeze()
+        x, y, _ = torch.nonzero(self.idxmap[..., None] == cull).t()
+        t = torch.cat([tris * z, vnorms * z, z], dim=2)[self.idxmap][x, y, ...]
+        w = self.uvwmap[x, y, None, :]
+        return x, y, t, w
 
     def forward(self, vertices, image):
         self.render(vertices, image)
         return self.result
 
-    def render(self, vertices, image):
+    def render(self, vertices, image, eyepoint=None):
         """
         If image is a PIL rgb image convert, or if tensor, pass directly.
         The resulting image must be channels * height * width.
@@ -284,21 +289,19 @@ class Reverse(Render):
         self.nmap = torch.zeros([h, w, 3], device=self.device)
         self.zbuffer = torch.zeros([h, w], device=self.device) + zmin
         self.result = torch.zeros([c, h, w], device=self.device)
-        tris, uvws, idx = self.cull(vertices)
 
-        idx = torch.cat(idx)
-        pts = torch.cat([w @ t for t, w in zip(tris, uvws)])
-        pts[:, -1:] = 1 / pts[:, -1:]
-        pts[:, :-1] = pts[:, :-1] * pts[:, -1:]
+        x, y, t, w = self.tri_stack(vertices, eyepoint)
 
-        # lookup in uvmap
-        result = torch.grid_sampler_2d(
+        pts_stack = (w @ t)[:, 0, :]
+        pts_stack[:, -1:] = 1 / pts_stack[:, -1:]
+        pts_stack[:, :-1] = pts_stack[:, :-1] * pts_stack[:, -1:]
+
+        lookup = torch.grid_sampler_2d(
             self.uvmap[None, ...],
-            pts[None, None, :, 0:2],
+            pts_stack[None, None, :, :2],
             0, 0, align_corners=False)[0, :, 0, :]
 
-        # fill buffers
-        self.zbuffer[idx[:, 0], idx[:, 1]] = pts[:, -1]
-        self.nmap[idx[:, 0], idx[:, 1], :] = pts[:, 3:6]
-        self.result[:-1, idx[:, 0], idx[:, 1]] = result
-        self.result[-1, idx[:, 0], idx[:, 1]] = 1.0
+        self.zbuffer[x, y] = pts_stack[:, -1]
+        self.nmap[x, y, :] = pts_stack[:, 3:6]
+        self.result[:-1, x, y] = lookup
+        self.result[-1, x, y] = 1.0
