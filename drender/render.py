@@ -61,13 +61,14 @@ def face_normals(tris):
     return normals / torch.norm(normals)
 
 
-def backface_cull(tris):
+def backface_cull(tris, eyepoint=None):
     """
     Return a mask for the triangles that face forward. Tris are assumed to be
     in view space."""
-    dtype, device = tris.dtype, tris.device
+    if eyepoint is None:
+        eyepoint = torch.tensor([0, 0, 1.0], device=tris.device)
     normals = face_normals(tris)
-    m = normals @ torch.tensor([0, 0, 1.0], dtype=dtype, device=device)
+    m = normals @ eyepoint
     return m > 0
 
 
