@@ -234,6 +234,7 @@ class Reverse(Render):
     def __init__(self, size, faces, uv, uvfaces, device=DEVICE):
         super(Reverse, self).__init__(
             size, faces, uv, uvfaces, uvmap=None, device=device)
+        self.size_limit = 256
         self.uvmap = None
         self.uvwmap = None
         self.idxmap = None
@@ -278,7 +279,7 @@ class Reverse(Render):
 
         cull = torch.nonzero(backface_cull(tris, eyepoint)).squeeze()
 
-        if self.size < 256:
+        if self.size <= self.size_limit:
             x, y, _ = torch.nonzero(self.idxmap[..., None] == cull).t()
             return x, y
 
