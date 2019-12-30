@@ -267,6 +267,27 @@ class Reverse(Render):
         # if we built it, save it for reuse
         write_map_cache(self.size, self.uvwmap, self.idxmap)
 
+    def back_face_cull(self, tris, eyepoint=None):
+        """
+        Back face cull:  return the x, y coordinates in the weight and index
+        maps for each forward facing triangle.
+        2 methods depending on size...
+        If the map is too big the 'fast' method will run out of memory.
+        NB. method 2 is only faster on GPU.
+        """
+
+        cull = torch.nonzero(backface_cull(tris, eyepoint)).squeeze()
+
+        if self.size < 256:
+            x, y, _ = torch.nonzero(self.idxmap[..., None] == cull).t()
+            return x, y
+
+        mask = torch.zeros_like(self.idxmap)
+        for i in cull:
+            mask[self.idxmap == i] = 1
+        x, y = torch.nonzero(mask).t()
+        return x, y
+
     def tri_stack(self, vertices, eyepoint=None):
         """backface cull the triangles and return
         the x, y indices, culled triangles and matching barycentric weights:
@@ -275,17 +296,16 @@ class Reverse(Render):
         tris = vertices[self.f]
         z = - tris[:, :, 2, None]
         vnorms = self.vertex_normals(vertices)[self.f]
-        cull = torch.nonzero(backface_cull(tris, eyepoint)).squeeze()
-        x, y, _ = torch.nonzero(self.idxmap[..., None] == cull).t()
+        x, y, = self.back_face_cull(tris, eyepoint)
         t = torch.cat([tris * z, vnorms * z, z], dim=2)[self.idxmap][x, y, ...]
         w = self.uvwmap[x, y, None, :]
         return x, y, t, w
 
-    def forward(self, vertices, image):
-        self.render(vertices, image)
+    def forward(self, vertices, image, eyepoint=None):
+        self.render(vertices, image, eyepoint)
         return self.result
 
-    def render(self, vertices, image, eyepoint=None):
+    def render(self, vertices, image, eyepoint):
         """
         If image is a PIL rgb image convert, or if tensor, pass directly.
         The resulting image must be channels * height * width.
@@ -301,9 +321,9 @@ class Reverse(Render):
         self.zbuffer = torch.zeros([h, w], device=self.device) + zmin
         self.result = torch.zeros([c, h, w], device=self.device)
 
-        x, y, t, w = self.tri_stack(vertices, eyepoint)
+        x, y, tris, weights = self.tri_stack(vertices, eyepoint)
 
-        pts_stack = (w @ t)[:, 0, :]
+        pts_stack = (weights @ tris)[:, 0, :]
         pts_stack[:, -1:] = 1 / pts_stack[:, -1:]
         pts_stack[:, :-1] = pts_stack[:, :-1] * pts_stack[:, -1:]
 
