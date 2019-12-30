@@ -29,11 +29,8 @@ image = Image.open("examples/face.png")
 cam = Pinhole(f=5, t=[0, -0.03, 1])
 vp = cam.project(v)
 
-print(vp.min(0)[0])
-print(vp.max(0)[0])
-
 t0 = time.time()
-rev = Reverse(uv_size, f, uv, uvf)
+rev = Reverse(uv_size, f, uv, uvf, device=DEVICE)
 t1 = time.time()
 print(f"time to build point table: {t1-t0:0.2f}")
 
@@ -43,11 +40,11 @@ t1 = time.time()
 print(f"time to render: {t1-t0:0.2f}")
 
 # image out
-img = topil(result.cpu())
+img = topil(result.cpu()[:3, ...])
 img.convert("RGB").save("reverse_flame.jpg")
 
-img = topil(rev.normal_map())
+img = topil(rev.normal_map().cpu())
 img.convert("RGB").save("reverse_norm_flame.jpg")
 
-img = topil(rev.z_map())
+img = topil(rev.z_map().cpu())
 img.convert("RGB").save("reverse_z_flame.jpg")

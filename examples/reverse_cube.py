@@ -27,9 +27,6 @@ rev = Reverse(uv_size, rcube.f, rcube.uv, rcube.uvf)
 cam = Pinhole(f=1, t=[0, 0, 2])
 vp = cam.project(rcube.v)
 
-print(vp.min(0)[0])
-print(vp.max(0)[0])
-
 # %%
 
 target = topil(rnd(vp))
@@ -45,8 +42,8 @@ target.convert("RGB").save("target_cube.jpg")
 img = topil(result.cpu()[:3, ...])
 img.convert("RGB").save("reverse_cube.jpg")
 
-img = topil(rev.normal_map())
+img = topil(rev.normal_map().cpu())
 img.convert("RGB").save("reverse_norm_cube.jpg")
 
-img = topil(rev.z_map())
+img = topil(rev.z_map().cpu())
 img.convert("RGB").save("reverse_z_cube.jpg")
