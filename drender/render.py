@@ -329,15 +329,15 @@ class Reverse(Render):
         x, y, tris, weights = self.tri_stack(vertices, eyepoint)
 
         pts_stack = (weights @ tris)[:, 0, :]
-        pts_stack[:, -1:] = 1 / pts_stack[:, -1:]
-        pts_stack[:, :-1] = pts_stack[:, :-1] * pts_stack[:, -1:]
+        pts_z = 1 / pts_stack[:, -1]
+        pts = pts_stack[:, :-1] * pts_z[..., None]
 
         lookup = torch.grid_sampler_2d(
             self.uvmap[None, ...],
-            pts_stack[None, None, :, :2],
+            pts[None, None, :, :2],
             0, 0, align_corners=False)[0, :, 0, :]
 
-        self.zbuffer[x, y] = pts_stack[:, -1]
-        self.nmap[x, y, :] = pts_stack[:, 3:6]
+        self.zbuffer[x, y] = pts_z
+        self.nmap[x, y, :] = pts[:, 3:6]
         self.result[:-1, x, y] = lookup
         self.result[-1, x, y] = 1.0
