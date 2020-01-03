@@ -1,8 +1,11 @@
 """Render an object"""
+import logging
 import torch
 from torchvision.transforms import ToTensor
 from PIL import Image
 from .utils import DEVICE, image2uvmap, write_map_cache, read_map_cache
+
+LOG = logging.getLogger(__name__)
 
 
 def area2d(a, b, c):
@@ -249,9 +252,10 @@ class Reverse(Render):
                 uvwmap, idxmap = read_map_cache(self.size)
                 self.uvwmap = uvwmap.to(self.device)
                 self.idxmap = idxmap.to(self.device)
+                LOG.info("Read cached maps")
                 return
             except IOError as _:
-                print("Reading cache failed, rebuilding...")
+                LOG.info("Reading cache failed, rebuilding...")
 
         self.uvwmap = torch.ones(self.size, self.size, 3, device=self.device)
         self.idxmap = torch.ones(self.size, self.size,
