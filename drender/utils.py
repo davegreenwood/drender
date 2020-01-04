@@ -1,4 +1,5 @@
 """Utility functions to load data."""
+import logging
 import pickle
 import os
 from pkg_resources import resource_filename
@@ -11,9 +12,9 @@ from PIL import Image
 
 RCUBE = resource_filename(__name__, "data/rcube.obj")
 UVMAP = resource_filename(__name__, "data/util-mark6.png")
-DTYPE = torch.float
-DEVICE = torch.device("cpu")
 CACHE = os.path.expanduser("~/.dg/drender/cache/")
+DEVICE = torch.device("cpu")
+LOG = logging.getLogger(__name__)
 
 
 def write_map_cache(size, weights, index):
@@ -23,6 +24,7 @@ def write_map_cache(size, weights, index):
     data = dict(weights=weights, index=index)
     with open(fname, "wb") as fid:
         pickle.dump(data, fid)
+    LOG.debug("writing file: %s", fname)
 
 
 def read_map_cache(size):
@@ -33,7 +35,7 @@ def read_map_cache(size):
             data = pickle.load(fid)
         return data["weights"], data["index"]
     except IOError:
-        print("Could not read file:", fname)
+        LOG.debug("Could not read file: %s", fname)
         raise
 
 
