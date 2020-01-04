@@ -1,9 +1,9 @@
 """Render an object"""
 import logging
 import torch
-from torchvision.transforms import ToTensor
 from PIL import Image
 from .utils import DEVICE, image2uvmap, write_map_cache, read_map_cache
+
 
 LOG = logging.getLogger(__name__)
 
