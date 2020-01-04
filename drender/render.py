@@ -64,6 +64,15 @@ def face_normals(tris):
     return normals / torch.norm(normals)
 
 
+def side_cull(tris):
+    """only tris greater than -1 and less than 1 in x and y."""
+    xmin = (tris[:, :, 0] > -1).all(dim=1)
+    xmax = (tris[:, :, 0] < 1).all(dim=1)
+    ymin = (tris[:, :, 1] > -1).all(dim=1)
+    ymax = (tris[:, :, 1] < 1).all(dim=1)
+    return torch.stack([xmin, xmax, ymin, ymax], dim=1).all(dim=1)
+
+
 def backface_cull(tris, eyepoint=None):
     """
     Return a mask for the triangles that face forward. Tris are assumed to be
@@ -281,7 +290,9 @@ class Reverse(Render):
         NB. method 2 is only faster on GPU.
         """
 
-        cull = torch.nonzero(backface_cull(tris, eyepoint)).squeeze()
+        back = backface_cull(tris)
+        side = side_cull(tris)
+        cull = torch.nonzero(back & side).squeeze()
 
         if self.size <= self.size_limit:
             x, y, _ = torch.nonzero(self.idxmap[..., None] == cull).t()
