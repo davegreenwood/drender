@@ -21,7 +21,7 @@ def write_map_cache(size, weights, index):
     """Write a UV weight map to disk - using size as the filename."""
     os.makedirs(CACHE, exist_ok=True)
     fname = os.path.join(CACHE, f"{int(size)}.pkl")
-    data = dict(weights=weights, index=index)
+    data = dict(weights=weights.detach().cpu(), index=index.detach().cpu())
     with open(fname, "wb") as fid:
         pickle.dump(data, fid)
     LOG.debug("writing file: %s", fname)
