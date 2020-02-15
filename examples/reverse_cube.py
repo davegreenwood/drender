@@ -16,7 +16,7 @@ DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(DEVICE)
 
 # set defaults
-uv_size, target_size = 512, 512
+uv_size, target_size = 500, 500
 topil, toten = ToPILImage(), ToTensor()
 rcube = Rcube()
 
